@@ -56,7 +56,7 @@
 |---|---|---|---|
 | 1 | **Google Sheets sebagai DB**: rate limit API (100 req/100s/user) | Bot lambat/gagal saat traffic tinggi | Caching in-memory dengan TTL untuk data master (Services, Schedule, FAQ, Settings); batching read/write; debounce write |
 | 2 | **Spreadsheet diedit manual oleh admin secara tidak konsisten** (ubah struktur kolom) | Bot/parsing rusak | Header row validasi saat startup; dokumentasi ketat struktur sheet; opsi "lock header row" di Google Sheets |
-| 3 | **Evolution API session terputus** | Bot tidak bisa kirim/terima pesan | Health-check endpoint + auto-reconnect + alert log; admin dashboard menampilkan status koneksi WA |
+| 3 | **Baileys session terputus** | Bot tidak bisa kirim/terima pesan | Health-check endpoint + auto-reconnect + alert log; admin dashboard menampilkan status koneksi WA; session persisten di disk (`sessions/baileys/`) sehingga tidak perlu scan QR ulang setelah restart |
 | 4 | **AI keluar dari guardrail (jailbreak/prompt injection dari user)** | AI menjawab di luar topik / bocor instruksi sistem | System prompt strict + post-filter response (keyword/topic classifier sederhana) + hard fallback message bila skor relevansi rendah |
 | 5 | **Salah perhitungan reminder (timezone)** | Reminder terkirim di waktu salah | Standarisasi timezone `Asia/Jakarta` di seluruh sistem (node-cron + date lib seperti `date-fns-tz`), unit test khusus untuk reminder scheduler |
 | 6 | **Admin takeover tidak ter-track / bot tetap balas saat admin sedang chat** | Customer bingung dapat 2 balasan berbeda | State takeover disimpan per nomor WA (in-memory + persist ke sheet `Admin Log`/state sheet) dengan TTL 30 menit, dicek di setiap incoming message sebelum bot proses |
@@ -80,10 +80,10 @@ Application (Services / Use Cases)
         ↓ depends on
 Domain (Entities, Value Objects, Interfaces / Ports)
         ↑ implemented by
-Infrastructure (Repository Implementations: Google Sheets, Evolution API client, OpenAI client, Logger)
+Infrastructure (Repository Implementations: Google Sheets, BaileysClient, OpenAI client, Logger)
 ```
 
-Aturan dependency: **layer luar boleh tergantung ke layer dalam, tidak sebaliknya**. Domain tidak tahu apa-apa tentang Express, Google Sheets, atau Evolution API — hanya mendefinisikan interface (port). Infrastructure mengimplementasikan interface tersebut (adapter). Ini membuat Repository Pattern + Dependency Injection menjadi natural.
+Aturan dependency: **layer luar boleh tergantung ke layer dalam, tidak sebaliknya**. Domain tidak tahu apa-apa tentang Express, Google Sheets, atau Baileys — hanya mendefinisikan interface (port). Infrastructure mengimplementasikan interface tersebut (adapter). Ini membuat Repository Pattern + Dependency Injection menjadi natural.
 
 ### 3.2 Diagram Arsitektur (Mermaid)
 
@@ -117,7 +117,7 @@ flowchart TB
         end
         subgraph Infrastructure
             GSR[GoogleSheetsRepository impl]
-            EVO[EvolutionApiClient]
+            EVO[BaileysClient]
             OAI[OpenAIClient]
             LOG[Logger]
             ERR[Global Error Handler]
@@ -126,12 +126,13 @@ flowchart TB
 
     subgraph External["External Services"]
         GS[(Google Spreadsheet)]
-        EVOAPI[Evolution API / WhatsApp]
+        WA_SERVER[WhatsApp Web Server]
         OPENAI[OpenAI API]
     end
 
-    WA <--> EVOAPI
-    EVOAPI <--> WH
+    WA <--> WA_SERVER
+    WA_SERVER <--> EVO
+    EVO --> WH
     AdminUI <--> RC
     WH --> BS & PS & SS & FS & TS
     CR --> RS
@@ -140,7 +141,7 @@ flowchart TB
     AS --> OAI
     IF -.implemented by.-> GSR
     GSR --> GS
-    EVO --> EVOAPI
+
     OAI --> OPENAI
     FS -->|FAQ not found| AS
 ```
@@ -226,7 +227,7 @@ kania-happy-booking/
 │   │   │   │   │   ├── AdminLogRepository.ts
 │   │   │   │   │   └── SheetCache.ts                 # TTL in-memory cache
 │   │   │   │   ├── whatsapp/
-│   │   │   │   │   ├── EvolutionApiClient.ts
+│   │   │   │   │   ├── BaileysClient.ts
 │   │   │   │   │   └── WhatsAppMessageSender.ts
 │   │   │   │   ├── ai/
 │   │   │   │   │   └── OpenAiClient.ts
@@ -402,7 +403,7 @@ Logika ini berada di `GetAvailableScheduleService` (Application layer), bukan di
 | amount | number | nominal |
 | method | enum | `Cash` / `Transfer` / `QRIS` |
 | status | enum | `Cash` / `Waiting Verification` / `Paid` / `Rejected` |
-| proof_image_url | string | bukti transfer (dari WA media, disimpan via Evolution API/storage) |
+| proof_image_url | string | bukti transfer (dari WA media, disimpan via Baileys media download) |
 | verified_by | string | admin yang verifikasi |
 | verified_at | datetime | |
 | created_at | datetime | |
@@ -539,7 +540,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    IN[Pesan masuk via Evolution API Webhook] --> T{Takeover aktif untuk nomor ini?}
+    IN[Pesan masuk via Baileys messages.upsert event] --> T{Takeover aktif untuk nomor ini?}
     T -->|Ya, admin sedang chat| STOP[Bot tidak membalas]
     T -->|Tidak| ST{Ada session booking aktif?}
     ST -->|Ya| CONT[Lanjutkan Booking State Machine]
@@ -600,14 +601,14 @@ flowchart TD
 
 ## 7. DESAIN API
 
-Base URL: `/api/v1`. Autentikasi dashboard: JWT (admin login), endpoint webhook WA terpisah & diverifikasi via secret token Evolution API.
+Base URL: `/api/v1`. Autentikasi dashboard: JWT (admin login). Tidak ada endpoint webhook eksternal — pesan WA diterima langsung via Baileys event listener.
 
 ### 7.1 Daftar Endpoint (ringkasan)
 
 | Method | Endpoint | Deskripsi | Auth |
 |---|---|---|---|
 | POST | `/auth/login` | Login admin | Public |
-| POST | `/webhook/whatsapp` | Terima event dari Evolution API | Webhook secret |
+| POST | `/webhook/whatsapp` | Terima notifikasi internal (opsional, untuk integrasi masa depan) | Admin JWT |
 | GET | `/services` | List layanan | Admin |
 | POST | `/services` | Tambah layanan | Admin |
 | PUT | `/services/:id` | Edit layanan | Admin |
@@ -758,7 +759,7 @@ Sudah dijelaskan detail di diagram §6.1, §6.4. Ringkasan prinsip:
 
 1. Setiap pesan masuk dicek dulu status **takeover** → kalau aktif, bot diam total.
 2. Kalau tidak takeover, cek apakah customer sedang di tengah **booking state machine** → kalau ya, lanjutkan step berikutnya (jangan mulai ulang).
-3. Kalau tidak ada state aktif, deteksi intent sederhana berbasis keyword/menu angka (bot WA umumnya pakai menu angka/list interaktif via Evolution API, bukan NLU kompleks — sesuai prinsip "rule-based, bukan AI Agent").
+3. Kalau tidak ada state aktif, deteksi intent sederhana berbasis keyword/menu angka (bot WA pakai menu angka/list interaktif via Baileys, bukan NLU kompleks — sesuai prinsip "rule-based, bukan AI Agent").
 4. FAQ selalu dicoba dulu sebelum AI dipanggil (FR-1).
 
 ## 11. DESAIN AI FLOW
@@ -832,5 +833,3 @@ Dokumen ini mencakup seluruh poin yang diminta: analisis kebutuhan, risiko, arsi
 5. Sheet `Services` disederhanakan (tanpa description/duration — detail dijawab via FAQ); sheet `Broadcast` hanya menyasar customer dengan booking status `Paid`/`Cash`.
 
 **Belum ada kode aplikasi yang ditulis** — sesuai strategi implementasi yang diminta. Implementasi akan dimulai dari **M0 (Foundation)** setelah dokumen ini direview dan disetujui.
-
-Kalau sudah oke, saya akan mulai implementasi **M0 — Foundation** (setup project skeleton, env validator, logger, error handler, DI container) pada respons berikutnya.
