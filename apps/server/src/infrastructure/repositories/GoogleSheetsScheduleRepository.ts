@@ -3,11 +3,18 @@ import type { GoogleSheetsClient } from '../google-sheets/GoogleSheetsClient';
 import type { SheetCache } from '../google-sheets/SheetCache';
 import type { IScheduleRepository } from '@domain/repositories';
 import type { Schedule } from '@domain/entities/Schedule';
-import type { DayOfWeek } from '@domain/entities/Schedule';
+import { DAY_NAMES, DAY_NAME_TO_NUMBER } from '@domain/entities/Schedule';
 
 /**
- * Kolom sheet `Schedule` (0-based index):
+ * Kolom sheet `Schedule` (0-based):
  * A=0 schedule_id | B=1 service_id | C=2 day_of_week | D=3 time_start | E=4 time_end | F=5 is_active
+ *
+ * Kolom day_of_week disimpan sebagai NAMA HARI ("Senin", "Selasa", dst.)
+ * agar admin bisa membaca dan mengedit langsung di spreadsheet tanpa
+ * perlu tahu konvensi angka 0–6.
+ *
+ * Di memory, tetap digunakan DayOfWeek (number) sesuai interface Schedule.
+ * Konversi hanya terjadi di toEntity() (baca) dan toRow() (tulis).
  */
 const COL = {
   SCHEDULE_ID: 0,
@@ -66,16 +73,24 @@ export class GoogleSheetsScheduleRepository
     await this.updateRow(rowIndex, this.toRow(updated));
   }
 
-  // ── Mapper ────────────────────────────────────────────────────────────────
+  // ── Mapper ─────────────────────────────────────────────────────────────────
 
   private toEntity(row: string[]): Schedule {
+    const dayRaw = this.safeCell(row, COL.DAY_OF_WEEK);
+
+    // Terima nama hari ("Senin") ATAU angka lama ("1") agar backwards-compatible
+    // dengan data sheet yang mungkin masih pakai angka.
+    const dayOfWeek =
+      DAY_NAME_TO_NUMBER[dayRaw] ??
+      (Number.isInteger(Number(dayRaw)) ? (Number(dayRaw) as import('@domain/entities/Schedule').DayOfWeek) : 1);
+
     return {
-      scheduleId:  this.safeCell(row, COL.SCHEDULE_ID),
-      serviceId:   this.safeCell(row, COL.SERVICE_ID),
-      dayOfWeek:   parseInt(this.safeCell(row, COL.DAY_OF_WEEK), 10) as DayOfWeek,
-      timeStart:   this.safeCell(row, COL.TIME_START),
-      timeEnd:     this.safeCell(row, COL.TIME_END),
-      isActive:    this.safeBool(row, COL.IS_ACTIVE),
+      scheduleId: this.safeCell(row, COL.SCHEDULE_ID),
+      serviceId:  this.safeCell(row, COL.SERVICE_ID),
+      dayOfWeek,
+      timeStart:  this.safeCell(row, COL.TIME_START),
+      timeEnd:    this.safeCell(row, COL.TIME_END),
+      isActive:   this.safeBool(row, COL.IS_ACTIVE),
     };
   }
 
@@ -83,7 +98,7 @@ export class GoogleSheetsScheduleRepository
     return [
       schedule.scheduleId,
       schedule.serviceId,
-      String(schedule.dayOfWeek),
+      DAY_NAMES[schedule.dayOfWeek], // simpan nama hari, bukan angka
       schedule.timeStart,
       schedule.timeEnd,
       String(schedule.isActive),

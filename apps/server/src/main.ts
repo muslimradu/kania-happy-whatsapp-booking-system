@@ -23,6 +23,7 @@ import {
   GoogleSheetsBroadcastRepository,
   GoogleSheetsTakeoverRepository,
 } from '@infrastructure/repositories/GoogleSheetsOtherRepositories';
+import { GoogleSheetsPaymentMethodRepository } from '@infrastructure/repositories/GoogleSheetsPaymentMethodRepository';
 
 import type { ApiSuccessResponse } from '@shared/types';
 
@@ -62,6 +63,8 @@ function registerDependencies(): void {
     () => new GoogleSheetsBroadcastRepository(getClient(), getCache()));
   container.register(DI_TOKENS.TakeoverRepository,
     () => new GoogleSheetsTakeoverRepository(getClient(), getCache()));
+  container.register(DI_TOKENS.PaymentMethodRepository,
+    () => new GoogleSheetsPaymentMethodRepository(getClient(), getCache()));
 
   // ── Application Services (M2) ──────────────────────────────────────────
   container.register(DI_TOKENS.FaqLookupService, () =>

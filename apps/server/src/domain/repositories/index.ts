@@ -14,6 +14,7 @@ import type { Service } from './Service';
 import type { Schedule } from './Schedule';
 import type { Booking, CreateBookingDto } from './Booking';
 import type { Payment, CreatePaymentDto, PaymentStatus } from './Payment';
+import type { PaymentMethod } from './PaymentMethod';
 import type {
   Customer,
   Faq,
@@ -70,6 +71,20 @@ export interface IPaymentRepository {
     status: PaymentStatus,
     meta?: { verifiedBy?: string; proofImageUrl?: string },
   ): Promise<void>;
+}
+
+// ── Payment Method Repository ─────────────────────────────────────────────────
+
+export interface IPaymentMethodRepository {
+  /** Semua metode (termasuk nonaktif) — untuk halaman admin. */
+  findAll(): Promise<PaymentMethod[]>;
+  /** Hanya metode aktif — untuk ditampilkan ke customer. */
+  findActive(): Promise<PaymentMethod[]>;
+  findById(methodId: string): Promise<PaymentMethod | null>;
+  save(method: PaymentMethod): Promise<void>;
+  update(methodId: string, data: Partial<PaymentMethod>): Promise<void>;
+  /** Soft-delete: set is_active = false. */
+  deactivate(methodId: string): Promise<void>;
 }
 
 // ── Customer Repository ───────────────────────────────────────────────────────

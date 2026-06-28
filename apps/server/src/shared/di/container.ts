@@ -60,5 +60,6 @@ export const DI_TOKENS = {
   SettingsRepository:  'SettingsRepository',
   AdminLogRepository:  'AdminLogRepository',
   BroadcastRepository: 'BroadcastRepository',
+  PaymentMethodRepository: 'PaymentMethodRepository',
   TakeoverRepository:  'TakeoverRepository',
 } as const;
