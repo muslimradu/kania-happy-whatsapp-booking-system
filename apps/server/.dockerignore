@@ -1,0 +1,53 @@
+# ─── .dockerignore ────────────────────────────────────────────────────────────
+# File ini mencegah file yang tidak perlu masuk ke Docker image,
+# mempercepat build dan menjaga image tetap kecil & aman.
+
+# Dependencies — akan di-install ulang di dalam container
+node_modules/
+
+# Source TypeScript — hanya dist/ yang dipakai di production
+src/
+tests/
+*.test.ts
+*.spec.ts
+
+# Build artifacts TypeScript
+*.tsbuildinfo
+
+# Environment & Secrets — inject via docker run -e atau secrets manager
+.env
+.env.*
+*credentials*.json
+*service-account*.json
+
+# Git
+.git/
+.gitignore
+
+# Logs & Cache
+logs/
+*.log
+coverage/
+.eslintcache
+.prettiercache
+
+# Editor & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Dev config yang tidak dipakai di production
+.eslintrc*
+.prettierrc*
+vitest.config.ts
+tsconfig.json
+
+# Docs
+README.md
+docs/
+*.md
+
+# Setup scripts
+setup/
+setup-spreadsheet.ts

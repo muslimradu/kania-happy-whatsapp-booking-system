@@ -1,0 +1,104 @@
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ─── Build Output ─────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+.output/
+*.tsbuildinfo
+
+# ─── Environment & Secrets ────────────────────────────────────────────────────
+# JANGAN pernah commit file .env yang berisi kredensial asli
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+.env.test
+
+# Google Service Account credentials JSON
+*credentials*.json
+*service-account*.json
+*serviceaccount*.json
+google-credentials.json
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── Testing & Coverage ───────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+playwright-report/
+
+# ─── Cache ────────────────────────────────────────────────────────────────────
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+.stylelintcache
+.prettiercache
+tsconfig.tsbuildinfo
+
+# ─── Runtime & Temp ───────────────────────────────────────────────────────────
+tmp/
+temp/
+.temp/
+*.tmp
+*.temp
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ─── Editor ───────────────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+
+# ─── Package Manager ──────────────────────────────────────────────────────────
+# Pilih salah satu lock file sesuai package manager yang dipakai
+# Jika pakai npm  → commit package-lock.json, ignore yang lain
+# Jika pakai yarn → commit yarn.lock, ignore yang lain
+# Jika pakai pnpm → commit pnpm-lock.yaml, ignore yang lain
+yarn.lock
+pnpm-lock.yaml
+# package-lock.json  ← uncomment jika pakai yarn/pnpm
+
+# ─── Setup Script ─────────────────────────────────────────────────────────────
+# Script setup spreadsheet tidak perlu ikut ke repo production
+setup/
+setup-spreadsheet.ts
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+*.tgz
+*.zip
+.vercel
+.netlify

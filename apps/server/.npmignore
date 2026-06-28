@@ -1,0 +1,9 @@
+# ─── .npmignore (setup-script) ────────────────────────────────────────────────
+# Berlaku jika setup-script dipublish sebagai npm package (opsional)
+
+.env
+.env.*
+*credentials*.json
+node_modules/
+*.log
+.DS_Store

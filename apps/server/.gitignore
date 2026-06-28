@@ -1,9 +1,36 @@
+# ─── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
-dist/
-.env
-*.log
-.DS_Store
-coverage/
 
-# Baileys session — berisi kredensial WA, JANGAN di-commit
-sessions/
+# ─── Build Output ─────────────────────────────────────────────────────────────
+dist/
+*.tsbuildinfo
+
+# ─── Environment & Secrets ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+.env.test
+
+# Google Service Account — JANGAN pernah commit file ini
+*credentials*.json
+*service-account*.json
+google-credentials.json
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ─── Testing & Coverage ───────────────────────────────────────────────────────
+coverage/
+test-results/
+
+# ─── Cache ────────────────────────────────────────────────────────────────────
+.eslintcache
+.prettiercache
+
+# ─── OS & Editor ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
