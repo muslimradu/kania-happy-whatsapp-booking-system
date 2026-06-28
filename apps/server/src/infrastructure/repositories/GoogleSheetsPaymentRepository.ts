@@ -4,6 +4,7 @@ import type { SheetCache } from '../google-sheets/SheetCache';
 import type { IPaymentRepository } from '@domain/repositories';
 import type { Payment, CreatePaymentDto, PaymentStatus } from '@domain/entities/Payment';
 import type { PaymentMethod } from '@domain/entities/Booking';
+import { nowJakarta } from '@shared/types';
 
 /**
  * Kolom sheet `Payment` (0-based):
@@ -59,7 +60,7 @@ export class GoogleSheetsPaymentRepository
       proofImageUrl: '',
       verifiedBy:    '',
       verifiedAt:    '',
-      createdAt:     new Date().toISOString(),
+      createdAt:     nowJakarta(),
     };
     await this.appendRow(this.toRow(payment));
     return payment;
@@ -80,7 +81,7 @@ export class GoogleSheetsPaymentRepository
     }
     if (meta?.verifiedBy) {
       await this.updateCell(rowIndex, COL.VERIFIED_BY, meta.verifiedBy);
-      await this.updateCell(rowIndex, COL.VERIFIED_AT, new Date().toISOString());
+      await this.updateCell(rowIndex, COL.VERIFIED_AT, nowJakarta());
     }
   }
 

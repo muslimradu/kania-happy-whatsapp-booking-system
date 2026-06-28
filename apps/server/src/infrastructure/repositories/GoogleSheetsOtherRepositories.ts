@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { nowJakarta } from '@shared/types';
 import { BaseSheetRepository } from '../google-sheets/BaseSheetRepository';
 import type { GoogleSheetsClient } from '../google-sheets/GoogleSheetsClient';
 import type { SheetCache } from '../google-sheets/SheetCache';
@@ -91,7 +92,7 @@ export class GoogleSheetsAdminLogRepository
       entry.action,
       entry.targetId ?? '',
       entry.description,
-      new Date().toISOString(),
+      nowJakarta(),
     ]);
   }
 }
@@ -186,7 +187,7 @@ export class GoogleSheetsTakeoverRepository
 
   async setTakeover(phone: string, adminUsername: string, expiresAt: string): Promise<void> {
     const existing = await this.findRowIndex(0, phone);
-    const row: string[] = [phone, 'true', adminUsername, new Date().toISOString(), expiresAt];
+    const row: string[] = [phone, 'true', adminUsername, nowJakarta(), expiresAt];
 
     if (existing !== -1) {
       await this.updateRow(existing, row);

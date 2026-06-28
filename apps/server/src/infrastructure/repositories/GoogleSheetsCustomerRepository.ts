@@ -3,6 +3,7 @@ import type { GoogleSheetsClient } from '../google-sheets/GoogleSheetsClient';
 import type { SheetCache } from '../google-sheets/SheetCache';
 import type { ICustomerRepository } from '@domain/repositories';
 import type { Customer } from '@domain/entities';
+import { nowJakarta } from '@shared/types';
 
 /**
  * Kolom sheet `Customer` (0-based):
@@ -41,7 +42,7 @@ export class GoogleSheetsCustomerRepository
 
   async upsert(data: Pick<Customer, 'phone' | 'name'>): Promise<Customer> {
     const existing = await this.findByPhone(data.phone);
-    const now = new Date().toISOString();
+    const now = nowJakarta();
 
     if (existing) {
       // Update nama jika berubah
@@ -74,7 +75,7 @@ export class GoogleSheetsCustomerRepository
     const existing = await this.findByPhone(phone);
     if (!existing) return;
 
-    const now = new Date().toISOString();
+    const now = nowJakarta();
     await this.updateCell(rowIndex, COL.TOTAL_BOOKING, String(existing.totalBooking + 1));
     await this.updateCell(rowIndex, COL.LAST_BOOKING_AT, now);
   }

@@ -5,6 +5,7 @@ import type { SheetCache } from '../google-sheets/SheetCache';
 import type { IBookingRepository } from '@domain/repositories';
 import type { Booking, CreateBookingDto, BookingStatus } from '@domain/entities/Booking';
 import type { PaymentMethod } from '@domain/entities/Booking';
+import { nowJakarta } from '@shared/types';
 
 /**
  * Kolom sheet `Booking` (0-based):
@@ -76,7 +77,7 @@ export class GoogleSheetsBookingRepository
     const booking: Booking = {
       ...dto,
       bookingId:        `BKG-${uuidv4().slice(0, 8).toUpperCase()}`,
-      createdAt:        new Date().toISOString(),
+      createdAt:        nowJakarta(),
       reminderH1Sent:   false,
       reminderHariHSent: false,
     };

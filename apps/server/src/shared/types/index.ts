@@ -73,6 +73,20 @@ export class AppError extends Error {
 }
 
 /**
+ * Mengembalikan datetime sekarang dalam format ISO 8601 dengan offset GMT+7 (Asia/Jakarta).
+ * Gunakan fungsi ini di seluruh repository sebagai pengganti new Date().toISOString()
+ * agar waktu yang tersimpan di sheet mudah dibaca langsung (bukan UTC).
+ *
+ * Contoh output: "2026-06-28T11:54:06.460+07:00"
+ */
+export function nowJakarta(): string {
+  return new Date().toLocaleString('sv-SE', {
+    timeZone: 'Asia/Jakarta',
+    hour12: false,
+  }).replace(' ', 'T') + '+07:00';
+}
+
+/**
  * Bentuk standar response sukses untuk seluruh REST API.
  */
 export interface ApiSuccessResponse<T> {
