@@ -34,3 +34,7 @@ test-results/
 # ─── OS & Editor ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ─── Baileys WhatsApp Session ──────────────────────────────────────────────────
+# Berisi kredensial session WA (private keys, auth state) — JANGAN pernah commit
+sessions/
