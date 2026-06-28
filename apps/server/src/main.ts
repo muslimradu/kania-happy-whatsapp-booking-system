@@ -26,6 +26,12 @@ import {
 
 import type { ApiSuccessResponse } from '@shared/types';
 
+// ── Application Services (M2) ──────────────────────────────────────────────
+import { FaqLookupService } from '@application/faq/FaqLookupService';
+import { GetAvailableScheduleService } from '@application/schedule/GetAvailableScheduleService';
+import { MessageRouter } from '@application/bot/MessageRouter';
+import { WhatsAppHandler } from '@presentation/whatsapp/WhatsAppHandler';
+
 function registerDependencies(): void {
   // ── Infrastructure ─────────────────────────────────────────────────────────
   container.register(DI_TOKENS.BaileysClient,      () => new BaileysClient());
@@ -56,6 +62,35 @@ function registerDependencies(): void {
     () => new GoogleSheetsBroadcastRepository(getClient(), getCache()));
   container.register(DI_TOKENS.TakeoverRepository,
     () => new GoogleSheetsTakeoverRepository(getClient(), getCache()));
+
+  // ── Application Services (M2) ──────────────────────────────────────────
+  container.register(DI_TOKENS.FaqLookupService, () =>
+    new FaqLookupService(
+      container.resolve(DI_TOKENS.FaqRepository),
+    ));
+
+  container.register(DI_TOKENS.GetAvailableScheduleService, () =>
+    new GetAvailableScheduleService(
+      container.resolve(DI_TOKENS.ScheduleRepository),
+      container.resolve(DI_TOKENS.ServiceRepository),
+      container.resolve(DI_TOKENS.SettingsRepository),
+    ));
+
+  container.register(DI_TOKENS.MessageRouter, () =>
+    new MessageRouter(
+      container.resolve(DI_TOKENS.ServiceRepository),
+      container.resolve(DI_TOKENS.SettingsRepository),
+      container.resolve(DI_TOKENS.FaqLookupService),
+      container.resolve(DI_TOKENS.GetAvailableScheduleService),
+    ));
+
+  container.register(DI_TOKENS.WhatsAppHandler, () =>
+    new WhatsAppHandler(
+      container.resolve(DI_TOKENS.BaileysClient),
+      container.resolve(DI_TOKENS.TakeoverRepository),
+      container.resolve(DI_TOKENS.CustomerRepository),
+      container.resolve(DI_TOKENS.MessageRouter),
+    ));
 }
 
 function createApp(): Express {
@@ -101,6 +136,10 @@ async function bootstrap(): Promise<void> {
   baileysClient.onReady(() => {
     logger.info('WhatsApp terhubung dan siap menerima pesan ✓');
   });
+
+  // Daftarkan WhatsApp message handler (M2)
+  const waHandler = container.resolve<WhatsAppHandler>(DI_TOKENS.WhatsAppHandler);
+  waHandler.register();
 
   try {
     await baileysClient.connect();

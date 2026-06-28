@@ -47,11 +47,20 @@ Dibangun dengan Clean Architecture, Repository Pattern, dan TypeScript di atas N
 - **Unit test** — 11 test untuk `ServiceRepository`, `ScheduleRepository`, `FaqRepository` dengan mock client & cache
 - **tsconfig.test.json** — konfigurasi TypeScript terpisah untuk folder `tests/` dengan path alias yang benar
 
+### ✅ M2 — Bot Read-only
+
+- **`shared/utils/phoneFormatter.ts`** — `jidToPhone`, `phoneToJid`, `normalizePhone`
+- **`shared/utils/dateHelper.ts`** — `todayJakarta`, `formatDateDisplay`, `formatRupiah`, `nextOccurrence`, dll (selalu GMT+7)
+- **`FaqLookupService`** — keyword matching case-insensitive, pilih FAQ paling spesifik
+- **`GetAvailableScheduleService`** — generate occurrence dari template mingguan, window dari Settings
+- **`MessageRouter`** — deteksi intent (menu angka 1–5, keyword, FAQ lookup, fallback)
+- **`WhatsAppHandler`** — terima pesan Baileys → cek takeover → upsert customer → route → balas
+- Update `container.ts` & `main.ts` — register semua service baru
+
 ### 🔜 Milestone Berikutnya
 
 | Milestone | Deskripsi |
 |-----------|-----------|
-| M2 — Bot Read-only | Webhook handler, FAQ lookup, tampilkan layanan & jadwal |
 | M3 — Booking Flow | State machine booking, invoice generator |
 | M4 — Payment Flow | 3 metode bayar: Cash, Transfer, QRIS |
 | M5 — Reminder | Cron H-1 & Hari H untuk semua booking aktif |
@@ -92,14 +101,26 @@ apps/server/
 │   │   │   └── GoogleSheetsServiceRepository.ts
 │   │   └── whatsapp/
 │   │       └── BaileysClient.ts        # Koneksi & kirim pesan WhatsApp
+│   ├── application/
+│   │   ├── bot/
+│   │   │   └── MessageRouter.ts        # Deteksi intent & build teks balasan
+│   │   ├── faq/
+│   │   │   └── FaqLookupService.ts     # Keyword matching ke sheet FAQ
+│   │   └── schedule/
+│   │       └── GetAvailableScheduleService.ts  # Generate occurrence dari template mingguan
 │   ├── presentation/
-│   │   └── http/middlewares/
-│   │       ├── errorHandler.ts         # Global error handler Express
-│   │       └── requestLogger.ts        # Log setiap HTTP request
+│   │   ├── http/middlewares/
+│   │   │   ├── errorHandler.ts         # Global error handler Express
+│   │   │   └── requestLogger.ts        # Log setiap HTTP request
+│   │   └── whatsapp/
+│   │       └── WhatsAppHandler.ts      # Terima pesan Baileys → cek takeover → route → balas
 │   └── shared/
 │       ├── config/env.ts               # Zod schema — validasi .env saat startup
 │       ├── di/container.ts             # DI Container + DI_TOKENS
-│       └── types/index.ts              # AppError, ApiSuccessResponse, dll.
+│       ├── types/index.ts              # AppError, ApiSuccessResponse, nowJakarta()
+│       └── utils/
+│           ├── dateHelper.ts             # Format tanggal/waktu GMT+7, formatRupiah
+│           └── phoneFormatter.ts         # Konversi JID ↔ nomor bersih
 ├── tests/
 │   └── unit/
 │       └── repositories.test.ts        # 11 unit test (mock client & cache)

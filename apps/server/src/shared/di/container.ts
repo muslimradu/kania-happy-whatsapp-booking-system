@@ -42,6 +42,14 @@ export const DI_TOKENS = {
   BaileysClient:      'BaileysClient',
   OpenAiClient:       'OpenAiClient',
 
+  // ── Application Services ────────────────────────────────────────────────────
+  FaqLookupService:            'FaqLookupService',
+  GetAvailableScheduleService: 'GetAvailableScheduleService',
+  MessageRouter:               'MessageRouter',
+
+  // ── Presentation ─────────────────────────────────────────────────────────────
+  WhatsAppHandler: 'WhatsAppHandler',
+
   // ── Repositories ──────────────────────────────────────────────────────────
   ServiceRepository:   'ServiceRepository',
   ScheduleRepository:  'ScheduleRepository',
