@@ -11,7 +11,7 @@ import type {
 import type { Setting, AdminLog, AdminAction, Broadcast, TakeoverState } from '@domain/entities';
 
 // ── Settings ──────────────────────────────────────────────────────────────────
-// Kolom: A=0 key | B=1 value | C=2 description
+// Kolom: A=0 key | B=1 value
 
 export class GoogleSheetsSettingsRepository
   extends BaseSheetRepository
@@ -26,9 +26,8 @@ export class GoogleSheetsSettingsRepository
   async findAll(): Promise<Setting[]> {
     const rows = await this.readRows();
     return rows.map((r) => ({
-      key:         this.safeCell(r, 0),
-      value:       this.safeCell(r, 1),
-      description: this.safeCell(r, 2),
+      key:   this.safeCell(r, 0),
+      value: this.safeCell(r, 1),
     }));
   }
 
@@ -47,7 +46,7 @@ export class GoogleSheetsSettingsRepository
     if (rowIndex !== -1) {
       await this.updateCell(rowIndex, 1, value);
     } else {
-      await this.appendRow([key, value, '']);
+      await this.appendRow([key, value]);
     }
   }
 }

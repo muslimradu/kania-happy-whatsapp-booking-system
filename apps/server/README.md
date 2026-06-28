@@ -207,7 +207,7 @@ Nama sheet harus **persis** seperti ini (case-sensitive):
 | `Payment` | invoice_number, booking_id, amount, method, status, proof_image_url, verified_by, verified_at, created_at |
 | `Customer` | phone, name, first_contact_at, last_booking_at, total_booking |
 | `FAQ` | faq_id, keyword, question, answer, is_active |
-| `Settings` | key, value, description |
+| `Settings` | key, value |
 | `Admin Log` | log_id, admin_username, action, target_id, description, created_at |
 | `Broadcast` | broadcast_id, message, target_segment, status, scheduled_at, sent_at, created_by |
 | `Takeover State` | phone, is_taken_over, taken_over_by, started_at, expires_at |
