@@ -184,16 +184,27 @@ describe('MessageRouter', () => {
       makeServiceRepo(SAMPLE_SERVICES),
       makeSettingsRepo({ 'schedule_lookahead_days': '7' }),
     );
+    const mockBookingFlowHandler = {
+      handle: vi.fn().mockResolvedValue({ messages: ['Booking flow...'], done: false }),
+    };
+    const mockStateStore = {
+      get: vi.fn().mockReturnValue(null), // tidak ada flow aktif
+      set: vi.fn(),
+      clear: vi.fn(),
+    };
     router = new MessageRouter(
       makeServiceRepo(SAMPLE_SERVICES),
       makeSettingsRepo(),
       faqService,
       scheduleService,
+      mockBookingFlowHandler as any,
+      mockStateStore as any,
     );
   });
 
   it('menu "1" mengembalikan daftar layanan', async () => {
-    const reply = await router.handle('1');
+    const result = await router.handle('628111', '1');
+    const reply = result.messages[0];
     expect(reply).toContain('Layanan');
     expect(reply).toContain('Senam Aerobik');
     expect(reply).toContain('Zumba');
@@ -202,49 +213,58 @@ describe('MessageRouter', () => {
   });
 
   it('menu "2" mengembalikan jadwal', async () => {
-    const reply = await router.handle('2');
+    const result = await router.handle('628111', '2');
+    const reply = result.messages[0];
     expect(reply).toContain('Jadwal');
   });
 
   it('menu "3" mengembalikan pesan booking', async () => {
-    const reply = await router.handle('3');
+    const result = await router.handle('628111', '3');
+    const reply = result.messages[0];
     expect(reply.toLowerCase()).toContain('booking');
   });
 
   it('menu "5" mengembalikan info kontak', async () => {
-    const reply = await router.handle('5');
+    const result = await router.handle('628111', '5');
+    const reply = result.messages[0];
     expect(reply.toLowerCase()).toMatch(/admin|kontak|hubungi/);
   });
 
   it('pesan salam mengembalikan welcome message', async () => {
-    const reply = await router.handle('halo kak');
+    const result = await router.handle('628111', 'halo kak');
+    const reply = result.messages[0];
     expect(reply).toContain('Kania Happy');
   });
 
   it('keyword layanan mengembalikan daftar layanan', async () => {
-    const reply = await router.handle('ada kelas apa saja ya?');
+    const result = await router.handle('628111', 'ada kelas apa saja ya?');
+    const reply = result.messages[0];
     expect(reply).toContain('Layanan');
   });
 
   it('keyword jadwal mengembalikan jadwal', async () => {
     // Pakai kata "jadwal" saja tanpa "kelas" agar tidak tertangkap SERVICE_KEYWORDS
-    const reply = await router.handle('jadwal dong');
+    const result = await router.handle('628111', 'jadwal dong');
+    const reply = result.messages[0];
     expect(reply).toContain('Jadwal');
   });
 
   it('pesan yang cocok FAQ mengembalikan jawaban FAQ', async () => {
     // "berapa" ada di FAQ keyword tapi bukan di SERVICE_KEYWORDS — tidak ambigu
-    const reply = await router.handle('berapa ya?');
+    const result = await router.handle('628111', 'berapa ya?');
+    const reply = result.messages[0];
     expect(reply).toContain('Rp80.000');
   });
 
   it('pesan tidak dikenal mengembalikan fallback message dengan menu', async () => {
-    const reply = await router.handle('bla bla bla random pesan');
+    const result = await router.handle('628111', 'bla bla bla random pesan');
+    const reply = result.messages[0];
     expect(reply).toMatch(/1|2|3|4|5/); // tampilkan menu
   });
 
   it('harga layanan diformat sebagai Rupiah', async () => {
-    const reply = await router.handle('1');
+    const result = await router.handle('628111', '1');
+    const reply = result.messages[0];
     expect(reply).toContain('Rp');
   });
 });

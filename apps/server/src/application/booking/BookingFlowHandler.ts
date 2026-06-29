@@ -91,6 +91,17 @@ export class BookingFlowHandler {
     draft: BookingDraft,
     input: string,
   ): Promise<FlowResult> {
+    const idx = parseInt(input, 10) - 1;
+    const selected = draft.serviceOptions?.[idx];
+
+    // Guard: input bukan angka valid atau di luar range
+    if (!selected) {
+      return {
+        messages: [`Pilihan tidak valid. Ketik angka 1–${draft.serviceOptions?.length ?? '?'} ya Kak 😊`],
+        done: false,
+      };
+    }
+
     const result = await this.bookingService.chooseService(
       draft.serviceOptions ?? [],
       input,
@@ -107,9 +118,6 @@ export class BookingFlowHandler {
       this.stateStore.clear(phone);
       return { messages: [result.message], done: true };
     }
-
-    const idx = parseInt(input, 10) - 1;
-    const selected = draft.serviceOptions![idx]!;
 
     this.stateStore.set(phone, {
       ...draft,

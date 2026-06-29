@@ -310,12 +310,14 @@ describe('BookingFlowHandler — happy path', () => {
   });
 
   it('input tidak valid di CHOOSE_SERVICE → minta ulang', async () => {
-    await handler.handle(PHONE, 'booking');
-    const result = await handler.handle(PHONE, 'xyz');
-    // chooseService mock return null jika input tidak valid
+    // Setup: mock chooseService return null untuk input tidak valid
     mockBookingService.chooseService = vi.fn().mockResolvedValue(null);
-    const result2 = await handler.handle(PHONE, 'xyz');
-    expect(result2.messages[0]).toContain('tidak valid');
-    expect(stateStore.get(PHONE)?.step).toBe('CHOOSE_SERVICE');
+
+    await handler.handle(PHONE, 'booking'); // step: CHOOSE_SERVICE
+    const result = await handler.handle(PHONE, 'xyz'); // input tidak valid
+
+    expect(result.messages[0]).toContain('tidak valid');
+    expect(result.done).toBe(false);
+    expect(stateStore.get(PHONE)?.step).toBe('CHOOSE_SERVICE'); // tetap di step sama
   });
 });
