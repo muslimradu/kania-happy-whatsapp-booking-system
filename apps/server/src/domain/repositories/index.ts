@@ -1,20 +1,8 @@
-/**
- * Repository Interfaces (Domain Layer)
- *
- * Interface ini adalah kontrak antara domain/application layer dan
- * infrastructure layer. Domain layer HANYA bergantung pada interface ini,
- * bukan pada implementasi konkret (GoogleSheetsXxxRepository).
- *
- * Keuntungan:
- *  - Unit test bisa pakai in-memory mock tanpa menyentuh Sheets.
- *  - Di masa depan, storage bisa diganti (misal ke database) tanpa
- *    mengubah satu baris pun di Service layer.
- */
-import type { Service } from './Service';
-import type { Schedule } from './Schedule';
-import type { Booking, CreateBookingDto } from './Booking';
-import type { Payment, CreatePaymentDto, PaymentStatus } from './Payment';
-import type { PaymentMethod } from './PaymentMethod';
+import type { Service } from '../entities/Service';
+import type { Schedule } from '../entities/Schedule';
+import type { Booking, CreateBookingDto, BookingStatus } from '../entities/Booking';
+import type { Payment, CreatePaymentDto, PaymentStatus } from '../entities/Payment';
+import type { PaymentMethod } from '../entities/PaymentMethod';
 import type {
   Customer,
   Faq,
@@ -23,7 +11,7 @@ import type {
   AdminAction,
   Broadcast,
   TakeoverState,
-} from './index';
+} from '../entities/index';
 
 // ── Service Repository ────────────────────────────────────────────────────────
 
@@ -52,10 +40,10 @@ export interface IBookingRepository {
   findAll(): Promise<Booking[]>;
   findById(bookingId: string): Promise<Booking | null>;
   findByPhone(phone: string): Promise<Booking[]>;
-  findByDate(date: string): Promise<Booking[]>;           // YYYY-MM-DD
+  findByDate(date: string): Promise<Booking[]>;
   findPendingReminders(type: 'h1' | 'hariH'): Promise<Booking[]>;
   create(dto: CreateBookingDto): Promise<Booking>;
-  updateStatus(bookingId: string, status: Booking['bookingStatus']): Promise<void>;
+  updateStatus(bookingId: string, status: BookingStatus): Promise<void>;
   markReminderSent(bookingId: string, type: 'h1' | 'hariH'): Promise<void>;
 }
 
@@ -76,14 +64,11 @@ export interface IPaymentRepository {
 // ── Payment Method Repository ─────────────────────────────────────────────────
 
 export interface IPaymentMethodRepository {
-  /** Semua metode (termasuk nonaktif) — untuk halaman admin. */
   findAll(): Promise<PaymentMethod[]>;
-  /** Hanya metode aktif — untuk ditampilkan ke customer. */
   findActive(): Promise<PaymentMethod[]>;
   findById(methodId: string): Promise<PaymentMethod | null>;
   save(method: PaymentMethod): Promise<void>;
   update(methodId: string, data: Partial<PaymentMethod>): Promise<void>;
-  /** Soft-delete: set is_active = false. */
   deactivate(methodId: string): Promise<void>;
 }
 
@@ -101,7 +86,6 @@ export interface ICustomerRepository {
 export interface IFaqRepository {
   findAll(): Promise<Faq[]>;
   findActive(): Promise<Faq[]>;
-  /** Cari FAQ berdasarkan keyword matching (case-insensitive). */
   search(query: string): Promise<Faq | null>;
   save(faq: Faq): Promise<void>;
   update(faqId: string, data: Partial<Faq>): Promise<void>;
@@ -112,7 +96,6 @@ export interface IFaqRepository {
 export interface ISettingsRepository {
   findAll(): Promise<Setting[]>;
   findByKey(key: string): Promise<Setting | null>;
-  /** Ambil value langsung, kembalikan defaultValue jika key tidak ada. */
   getValue(key: string, defaultValue?: string): Promise<string>;
   set(key: string, value: string): Promise<void>;
 }
@@ -142,10 +125,7 @@ export interface IBroadcastRepository {
 
 export interface ITakeoverRepository {
   findByPhone(phone: string): Promise<TakeoverState | null>;
-  /** Tandai nomor sebagai sedang di-takeover admin. */
   setTakeover(phone: string, adminUsername: string, expiresAt: string): Promise<void>;
-  /** Lepaskan takeover (admin selesai / timeout). */
   clearTakeover(phone: string): Promise<void>;
-  /** Ambil semua takeover yang sudah expired. */
   findExpired(): Promise<TakeoverState[]>;
 }

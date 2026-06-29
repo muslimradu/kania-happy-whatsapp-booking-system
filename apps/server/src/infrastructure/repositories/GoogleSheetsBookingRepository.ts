@@ -4,13 +4,11 @@ import type { GoogleSheetsClient } from '../google-sheets/GoogleSheetsClient';
 import type { SheetCache } from '../google-sheets/SheetCache';
 import type { IBookingRepository } from '@domain/repositories';
 import type { Booking, CreateBookingDto, BookingStatus } from '@domain/entities/Booking';
-import type { PaymentMethod } from '@domain/entities/Booking';
-import { nowJakarta } from '@shared/types';
 
 /**
  * Kolom sheet `Booking` (0-based):
  * A=0 booking_id | B=1 invoice_number | C=2 customer_phone | D=3 customer_name
- * E=4 service_id | F=5 schedule_id | G=6 booking_date | H=7 payment_method
+ * E=4 service_id | F=5 schedule_id | G=6 booking_date | H=7 payment_method_id
  * I=8 booking_status | J=9 created_at | K=10 reminder_h1_sent | L=11 reminder_hariH_sent
  */
 const COL = {
@@ -21,7 +19,7 @@ const COL = {
   SERVICE_ID:          4,
   SCHEDULE_ID:         5,
   BOOKING_DATE:        6,
-  PAYMENT_METHOD:      7,
+  PAYMENT_METHOD_ID:   7,
   BOOKING_STATUS:      8,
   CREATED_AT:          9,
   REMINDER_H1_SENT:    10,
@@ -53,32 +51,26 @@ export class GoogleSheetsBookingRepository
 
   async findByPhone(phone: string): Promise<Booking[]> {
     const rows = await this.readRows();
-    return rows
-      .filter((r) => r[COL.CUSTOMER_PHONE] === phone)
-      .map((r) => this.toEntity(r));
+    return rows.filter((r) => r[COL.CUSTOMER_PHONE] === phone).map((r) => this.toEntity(r));
   }
 
   async findByDate(date: string): Promise<Booking[]> {
     const rows = await this.readRows();
-    return rows
-      .filter((r) => r[COL.BOOKING_DATE] === date)
-      .map((r) => this.toEntity(r));
+    return rows.filter((r) => r[COL.BOOKING_DATE] === date).map((r) => this.toEntity(r));
   }
 
   async findPendingReminders(type: 'h1' | 'hariH'): Promise<Booking[]> {
     const all = await this.findAll();
-    const colFlag = type === 'h1' ? 'reminderH1Sent' : 'reminderHariHSent';
-    return all.filter(
-      (b) => b.bookingStatus === 'Confirmed' && !b[colFlag],
-    );
+    const flag = type === 'h1' ? 'reminderH1Sent' : 'reminderHariHSent';
+    return all.filter((b) => b.bookingStatus === 'Confirmed' && !b[flag]);
   }
 
   async create(dto: CreateBookingDto): Promise<Booking> {
     const booking: Booking = {
       ...dto,
-      bookingId:        `BKG-${uuidv4().slice(0, 8).toUpperCase()}`,
-      createdAt:        nowJakarta(),
-      reminderH1Sent:   false,
+      bookingId:         `BKG-${uuidv4().slice(0, 8).toUpperCase()}`,
+      createdAt:         new Date().toISOString(),
+      reminderH1Sent:    false,
       reminderHariHSent: false,
     };
     await this.appendRow(this.toRow(booking));
@@ -98,8 +90,6 @@ export class GoogleSheetsBookingRepository
     await this.updateCell(rowIndex, col, 'true');
   }
 
-  // ── Mapper ────────────────────────────────────────────────────────────────
-
   private toEntity(row: string[]): Booking {
     return {
       bookingId:         this.safeCell(row, COL.BOOKING_ID),
@@ -109,7 +99,7 @@ export class GoogleSheetsBookingRepository
       serviceId:         this.safeCell(row, COL.SERVICE_ID),
       scheduleId:        this.safeCell(row, COL.SCHEDULE_ID),
       bookingDate:       this.safeCell(row, COL.BOOKING_DATE),
-      paymentMethod:     this.safeCell(row, COL.PAYMENT_METHOD) as PaymentMethod,
+      paymentMethodId:   this.safeCell(row, COL.PAYMENT_METHOD_ID),
       bookingStatus:     this.safeCell(row, COL.BOOKING_STATUS) as BookingStatus,
       createdAt:         this.safeCell(row, COL.CREATED_AT),
       reminderH1Sent:    this.safeBool(row, COL.REMINDER_H1_SENT),
@@ -126,7 +116,7 @@ export class GoogleSheetsBookingRepository
       b.serviceId,
       b.scheduleId,
       b.bookingDate,
-      b.paymentMethod,
+      b.paymentMethodId,
       b.bookingStatus,
       b.createdAt,
       String(b.reminderH1Sent),

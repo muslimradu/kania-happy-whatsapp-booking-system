@@ -27,7 +27,7 @@ async function main() {
 
   // Bandingkan dengan yang diharapkan
   const expected = [
-    'Services', 'Schedule', 'Booking', 'Payment', 'Customer',
+    'Services', 'Schedule', 'Booking', 'Payment', 'Payment Method', 'Customer',
     'FAQ', 'Settings', 'Admin Log', 'Broadcast', 'Takeover State',
   ];
 
