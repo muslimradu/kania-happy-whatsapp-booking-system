@@ -68,4 +68,8 @@ export const DI_TOKENS = {
   BroadcastRepository: 'BroadcastRepository',
   PaymentMethodRepository: 'PaymentMethodRepository',
   TakeoverRepository:  'TakeoverRepository',
+
+  // ── M4: Reminder ──────────────────────────────────────────────────────────
+  ReminderService:   'ReminderService',
+  ReminderScheduler: 'ReminderScheduler',
 } as const;

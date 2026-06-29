@@ -6,10 +6,22 @@ import type { IBookingRepository } from '@domain/repositories';
 import type { Booking, CreateBookingDto, BookingStatus } from '@domain/entities/Booking';
 
 /**
- * Kolom sheet `Booking` (0-based):
- * A=0 booking_id | B=1 invoice_number | C=2 customer_phone | D=3 customer_name
- * E=4 service_id | F=5 schedule_id | G=6 booking_date | H=7 payment_method_id
- * I=8 booking_status | J=9 created_at | K=10 reminder_h1_sent | L=11 reminder_hariH_sent
+ * Kolom sheet `Booking` (0-based) — M4: tambah kolom M=12 schedule_time, N=13 service_name
+ *
+ * A=0  booking_id
+ * B=1  invoice_number
+ * C=2  customer_phone
+ * D=3  customer_name
+ * E=4  service_id
+ * F=5  service_name       ← baru M4
+ * G=6  schedule_id
+ * H=7  booking_date
+ * I=8  schedule_time      ← baru M4
+ * J=9  payment_method_id
+ * K=10 booking_status
+ * L=11 created_at
+ * M=12 reminder_h1_sent
+ * N=13 reminder_hariH_sent
  */
 const COL = {
   BOOKING_ID:          0,
@@ -17,13 +29,15 @@ const COL = {
   CUSTOMER_PHONE:      2,
   CUSTOMER_NAME:       3,
   SERVICE_ID:          4,
-  SCHEDULE_ID:         5,
-  BOOKING_DATE:        6,
-  PAYMENT_METHOD_ID:   7,
-  BOOKING_STATUS:      8,
-  CREATED_AT:          9,
-  REMINDER_H1_SENT:    10,
-  REMINDER_HARIH_SENT: 11,
+  SERVICE_NAME:        5,
+  SCHEDULE_ID:         6,
+  BOOKING_DATE:        7,
+  SCHEDULE_TIME:       8,
+  PAYMENT_METHOD_ID:   9,
+  BOOKING_STATUS:      10,
+  CREATED_AT:          11,
+  REMINDER_H1_SENT:    12,
+  REMINDER_HARIH_SENT: 13,
 } as const;
 
 const SHEET = 'Booking';
@@ -51,14 +65,23 @@ export class GoogleSheetsBookingRepository
 
   async findByPhone(phone: string): Promise<Booking[]> {
     const rows = await this.readRows();
-    return rows.filter((r) => r[COL.CUSTOMER_PHONE] === phone).map((r) => this.toEntity(r));
+    return rows
+      .filter((r) => r[COL.CUSTOMER_PHONE] === phone)
+      .map((r) => this.toEntity(r));
   }
 
   async findByDate(date: string): Promise<Booking[]> {
     const rows = await this.readRows();
-    return rows.filter((r) => r[COL.BOOKING_DATE] === date).map((r) => this.toEntity(r));
+    return rows
+      .filter((r) => r[COL.BOOKING_DATE] === date)
+      .map((r) => this.toEntity(r));
   }
 
+  /**
+   * Booking Confirmed yang belum terkirim reminder jenis tertentu.
+   * `findPendingReminders` tidak memfilter tanggal — itu tanggung jawab
+   * ReminderService yang tahu konteks "besok" atau "hari ini".
+   */
   async findPendingReminders(type: 'h1' | 'hariH'): Promise<Booking[]> {
     const all = await this.findAll();
     const flag = type === 'h1' ? 'reminderH1Sent' : 'reminderHariHSent';
@@ -97,8 +120,10 @@ export class GoogleSheetsBookingRepository
       customerPhone:     this.safeCell(row, COL.CUSTOMER_PHONE),
       customerName:      this.safeCell(row, COL.CUSTOMER_NAME),
       serviceId:         this.safeCell(row, COL.SERVICE_ID),
+      serviceName:       this.safeCell(row, COL.SERVICE_NAME),
       scheduleId:        this.safeCell(row, COL.SCHEDULE_ID),
       bookingDate:       this.safeCell(row, COL.BOOKING_DATE),
+      scheduleTime:      this.safeCell(row, COL.SCHEDULE_TIME),
       paymentMethodId:   this.safeCell(row, COL.PAYMENT_METHOD_ID),
       bookingStatus:     this.safeCell(row, COL.BOOKING_STATUS) as BookingStatus,
       createdAt:         this.safeCell(row, COL.CREATED_AT),
@@ -114,8 +139,10 @@ export class GoogleSheetsBookingRepository
       b.customerPhone,
       b.customerName,
       b.serviceId,
+      b.serviceName,
       b.scheduleId,
       b.bookingDate,
+      b.scheduleTime,
       b.paymentMethodId,
       b.bookingStatus,
       b.createdAt,

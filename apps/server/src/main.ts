@@ -39,6 +39,10 @@ import { InvoiceGenerator } from '@application/booking/InvoiceGenerator';
 import { BookingService } from '@application/booking/BookingService';
 import { BookingFlowHandler } from '@application/booking/BookingFlowHandler';
 
+// ── Reminder Scheduler (M4) ─────────────────────────────────────────────────
+import { ReminderService } from '@application/reminder/ReminderService';
+import { ReminderScheduler } from '@application/reminder/ReminderScheduler';
+
 function registerDependencies(): void {
   // ── Infrastructure ─────────────────────────────────────────────────────────
   container.register(DI_TOKENS.BaileysClient,      () => new BaileysClient());
@@ -119,6 +123,20 @@ function registerDependencies(): void {
       container.resolve(DI_TOKENS.ConversationStateStore),
     ));
 
+  // ── M4: Reminder ──────────────────────────────────────────────────────────
+  container.register(DI_TOKENS.ReminderService, () =>
+    new ReminderService(
+      container.resolve(DI_TOKENS.BookingRepository),
+      container.resolve(DI_TOKENS.SettingsRepository),
+      container.resolve(DI_TOKENS.BaileysClient),
+    ));
+
+  container.register(DI_TOKENS.ReminderScheduler, () =>
+    new ReminderScheduler(
+      container.resolve(DI_TOKENS.ReminderService),
+      container.resolve(DI_TOKENS.SettingsRepository),
+    ));
+
   container.register(DI_TOKENS.WhatsAppHandler, () =>
     new WhatsAppHandler(
       container.resolve(DI_TOKENS.BaileysClient),
@@ -175,6 +193,22 @@ async function bootstrap(): Promise<void> {
   // Daftarkan WhatsApp message handler (M2)
   const waHandler = container.resolve<WhatsAppHandler>(DI_TOKENS.WhatsAppHandler);
   waHandler.register();
+
+  // Mulai reminder scheduler (M4)
+  const reminderScheduler = container.resolve<ReminderScheduler>(DI_TOKENS.ReminderScheduler);
+  await reminderScheduler.start();
+
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    logger.info('SIGTERM diterima — menghentikan server...');
+    reminderScheduler.stop();
+    process.exit(0);
+  });
+  process.on('SIGINT', () => {
+    logger.info('SIGINT diterima — menghentikan server...');
+    reminderScheduler.stop();
+    process.exit(0);
+  });
 
   try {
     await baileysClient.connect();
