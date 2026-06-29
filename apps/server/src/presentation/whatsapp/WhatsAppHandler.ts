@@ -8,16 +8,10 @@ import { logger } from '@infrastructure/logger/Logger';
 /**
  * WhatsAppHandler (Presentation Layer)
  *
- * Tanggung jawab:
- *  - Menerima IncomingMessage dari BaileysClient.
- *  - Cek takeover state — kalau admin sedang chat, bot diam.
- *  - Delegasikan ke MessageRouter untuk mendapatkan teks balasan.
- *  - Kirim balasan via BaileysClient.
- *  - Upsert customer (nama dari pushName jika customer baru).
- *
- * Yang TIDAK dilakukan di sini:
- *  - Logika bisnis (ada di MessageRouter / Service layer).
- *  - Koneksi ke Baileys (itu urusan BaileysClient).
+ * Perubahan dari M2:
+ *  - `handle()` sekarang menerima RouterResult (array messages + optional qrisUrl).
+ *  - Kirim pesan satu per satu secara berurutan (await each).
+ *  - Jika ada qrisUrl, kirim gambar QRIS setelah semua pesan teks.
  */
 export class WhatsAppHandler {
   constructor(
@@ -27,19 +21,12 @@ export class WhatsAppHandler {
     private readonly messageRouter: MessageRouter,
   ) {}
 
-  /**
-   * Daftarkan handler ini ke BaileysClient.
-   * Dipanggil sekali saat bootstrap.
-   */
   register(): void {
     this.baileysClient.onMessage((msg) => this.handleMessage(msg));
     logger.info('WhatsAppHandler: terdaftar dan siap menerima pesan.');
   }
 
-  // ── Private ───────────────────────────────────────────────────────────────
-
   private async handleMessage(msg: IncomingMessage): Promise<void> {
-    // Abaikan pesan kosong
     if (!msg.body.trim()) return;
 
     const phone = jidToPhone(msg.from);
@@ -49,7 +36,7 @@ export class WhatsAppHandler {
       preview: msg.body.slice(0, 60),
     });
 
-    // ── 1. Cek takeover ────────────────────────────────────────────────────
+    // ── 1. Cek takeover ──────────────────────────────────────────────────────
     const takeover = await this.takeoverRepo.findByPhone(phone).catch(() => null);
     if (takeover?.isTakenOver) {
       const now     = Date.now();
@@ -58,31 +45,39 @@ export class WhatsAppHandler {
         logger.debug('WhatsAppHandler: takeover aktif — bot diam', { phone });
         return;
       }
-      // Takeover expired → clear otomatis
       await this.takeoverRepo.clearTakeover(phone).catch((err) =>
         logger.warn('WhatsAppHandler: gagal clear takeover expired', { error: err }),
       );
     }
 
-    // ── 2. Upsert customer ─────────────────────────────────────────────────
+    // ── 2. Upsert customer ───────────────────────────────────────────────────
     await this.upsertCustomer(phone, msg.pushName);
 
-    // ── 3. Routing & balas ────────────────────────────────────────────────
+    // ── 3. Route & balas ─────────────────────────────────────────────────────
     try {
-      const reply = await this.messageRouter.handle(msg.body);
-      await this.baileysClient.sendText(msg.from, reply);
+      const result = await this.messageRouter.handle(phone, msg.body);
+
+      // Kirim setiap pesan teks berurutan
+      for (const text of result.messages) {
+        await this.baileysClient.sendText(msg.from, text);
+      }
+
+      // Kirim gambar QRIS jika ada
+      if (result.qrisUrl) {
+        await this.baileysClient
+          .sendImage(msg.from, result.qrisUrl, 'Scan QRIS ini untuk pembayaran 📱')
+          .catch((err) =>
+            logger.warn('WhatsAppHandler: gagal kirim gambar QRIS', { error: err }),
+          );
+      }
 
       logger.debug('WhatsAppHandler: balasan terkirim', {
         phone,
-        replyPreview: reply.slice(0, 60),
+        messageCount: result.messages.length,
+        hasQris: !!result.qrisUrl,
       });
     } catch (err) {
-      logger.error('WhatsAppHandler: gagal memproses pesan', {
-        phone,
-        error: err,
-      });
-
-      // Kirim pesan error generic supaya customer tidak menunggu tanpa jawaban
+      logger.error('WhatsAppHandler: gagal memproses pesan', { phone, error: err });
       await this.baileysClient
         .sendText(
           msg.from,
@@ -97,7 +92,6 @@ export class WhatsAppHandler {
       const name = pushName?.trim() || phone;
       await this.customerRepo.upsert({ phone, name });
     } catch (err) {
-      // Non-fatal — jangan sampai gagal upsert menghentikan alur balasan
       logger.warn('WhatsAppHandler: gagal upsert customer', { phone, error: err });
     }
   }

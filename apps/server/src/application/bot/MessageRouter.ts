@@ -1,13 +1,12 @@
 import type { IServiceRepository, ISettingsRepository } from '@domain/repositories';
 import type { FaqLookupService } from '@application/faq/FaqLookupService';
 import type { GetAvailableScheduleService } from '@application/schedule/GetAvailableScheduleService';
+import type { BookingFlowHandler } from '@application/booking/BookingFlowHandler';
+import type { ConversationStateStore } from '@infrastructure/state/ConversationStateStore';
 import { DAY_NAMES } from '@domain/entities/Schedule';
 import { formatDateDisplay, formatTimeDisplay, formatRupiah } from '@shared/utils/dateHelper';
 import { logger } from '@infrastructure/logger/Logger';
 
-/**
- * Intent yang bisa dideteksi dari pesan customer.
- */
 export type Intent =
   | 'GREETING'
   | 'SHOW_SERVICES'
@@ -16,84 +15,99 @@ export type Intent =
   | 'FAQ'
   | 'UNKNOWN';
 
-// ── Keyword maps ──────────────────────────────────────────────────────────────
-
 const GREETING_KEYWORDS = ['halo', 'hai', 'hi', 'hei', 'hello', 'assalamualaikum', 'selamat', 'permisi', 'pagi', 'siang', 'sore', 'malam'];
 const SERVICE_KEYWORDS  = ['layanan', 'kelas', 'program', 'senam', 'harga', 'tarif', 'biaya', 'paket', 'info', 'daftar', 'ada apa saja', 'apa saja'];
 const SCHEDULE_KEYWORDS = ['jadwal', 'jam', 'hari', 'kapan', 'schedule', 'waktu'];
-const BOOKING_KEYWORDS  = ['booking', 'daftar', 'pesan', 'reservasi', 'ikut', 'gabung', 'mau daftar', 'mau ikut', 'mau booking'];
+const BOOKING_KEYWORDS  = ['booking', 'pesan', 'reservasi', 'ikut', 'gabung', 'mau daftar', 'mau ikut', 'mau booking', 'daftar kelas'];
 
 /**
  * MessageRouter
  *
- * Tanggung jawab: mendeteksi intent pesan customer dan menghasilkan teks balasan.
- * Ini adalah SATU-SATUNYA tempat logika routing bot berada.
+ * Sekarang mendukung 2 mode:
+ *  A) Customer sedang dalam booking flow → delegasikan ke BookingFlowHandler.
+ *  B) Tidak ada flow aktif → routing normal (menu angka / keyword / FAQ).
  *
- * Sesuai desain §10:
- *  1. Menu angka diproses di sini (1=Layanan, 2=Jadwal, 3=Booking, 4=FAQ).
- *  2. Intent keyword dideteksi untuk pesan bebas.
- *  3. FAQ selalu dicoba sebelum UNKNOWN.
+ * Kembalikan `RouterResult` agar WhatsAppHandler bisa mengirim beberapa
+ * pesan sekaligus (teks + gambar QRIS).
  */
+export interface RouterResult {
+  messages: string[];
+  /** URL gambar QRIS — dikirim sebagai gambar setelah pesan teks */
+  qrisUrl?: string;
+}
+
 export class MessageRouter {
   constructor(
     private readonly serviceRepo: IServiceRepository,
     private readonly settingsRepo: ISettingsRepository,
     private readonly faqService: FaqLookupService,
     private readonly scheduleService: GetAvailableScheduleService,
+    private readonly bookingFlowHandler: BookingFlowHandler,
+    private readonly stateStore: ConversationStateStore,
   ) {}
 
-  /**
-   * Proses pesan masuk dan kembalikan teks balasan.
-   * Kembalikan null jika tidak ada yang perlu dibalas (seharusnya tidak terjadi di M2).
-   */
-  async handle(message: string): Promise<string> {
+  async handle(phone: string, message: string): Promise<RouterResult> {
     const trimmed = message.trim();
     const lower   = trimmed.toLowerCase();
 
-    // ── 1. Menu angka ─────────────────────────────────────────────────────────
+    // ── A. Ada booking flow aktif → serahkan ke BookingFlowHandler ────────────
+    const draft = this.stateStore.get(phone);
+    if (draft && draft.step !== 'IDLE') {
+      const result = await this.bookingFlowHandler.handle(phone, trimmed);
+      return { messages: result.messages, qrisUrl: result.qrisUrl };
+    }
+
+    // ── B. Routing normal ─────────────────────────────────────────────────────
+
+    // Menu angka
     if (/^[1-5]$/.test(trimmed)) {
-      return this.handleMenuNumber(trimmed);
+      return this.handleMenuNumber(phone, trimmed);
     }
 
-    // ── 2. Greeting ──────────────────────────────────────────────────────────
+    // Greeting
     if (GREETING_KEYWORDS.some((kw) => lower.includes(kw))) {
-      return this.buildWelcomeMessage();
+      return { messages: [await this.buildWelcomeMessage()] };
     }
 
-    // ── 3. Intent Keyword Detection ──────────────────────────────────────────
+    // Intent keyword
     if (SERVICE_KEYWORDS.some((kw) => lower.includes(kw))) {
-      return this.buildServicesMessage();
+      return { messages: [await this.buildServicesMessage()] };
     }
 
     if (SCHEDULE_KEYWORDS.some((kw) => lower.includes(kw))) {
-      return this.buildScheduleMessage();
+      return { messages: [await this.buildScheduleMessage()] };
     }
 
     if (BOOKING_KEYWORDS.some((kw) => lower.includes(kw))) {
-      return this.buildBookingTeaser();
+      // Mulai booking flow
+      const result = await this.bookingFlowHandler.handle(phone, trimmed);
+      return { messages: result.messages, qrisUrl: result.qrisUrl };
     }
 
-    // ── 4. FAQ Lookup ────────────────────────────────────────────────────────
+    // FAQ lookup
     const faq = await this.faqService.lookup(lower);
     if (faq) {
       logger.debug('MessageRouter: FAQ match', { faqId: faq.faqId });
-      return faq.answer;
+      return { messages: [faq.answer] };
     }
 
-    // ── 5. Fallback ──────────────────────────────────────────────────────────
-    return this.buildFallbackMessage();
+    // Fallback
+    return { messages: [this.buildFallbackMessage()] };
   }
 
-  // ── Private builders ───────────────────────────────────────────────────────
+  // ── Private builders ────────────────────────────────────────────────────────
 
-  private async handleMenuNumber(num: string): Promise<string> {
+  private async handleMenuNumber(phone: string, num: string): Promise<RouterResult> {
     switch (num) {
-      case '1': return this.buildServicesMessage();
-      case '2': return this.buildScheduleMessage();
-      case '3': return this.buildBookingTeaser();
-      case '4': return this.buildFaqMenuMessage();
-      case '5': return this.buildContactMessage();
-      default:  return this.buildWelcomeMessage();
+      case '1': return { messages: [await this.buildServicesMessage()] };
+      case '2': return { messages: [await this.buildScheduleMessage()] };
+      case '3': {
+        const result = await this.bookingFlowHandler.handle(phone, num);
+        return { messages: result.messages, qrisUrl: result.qrisUrl };
+      }
+      case '4': return { messages: [this.buildFaqMenuMessage()] };
+      case '5': return { messages: [await this.buildContactMessage()] };
+      default:  return { messages: [await this.buildWelcomeMessage()] };
     }
   }
 
@@ -115,30 +129,25 @@ export class MessageRouter {
 
   private async buildServicesMessage(): Promise<string> {
     const services = await this.serviceRepo.findActive();
-
     if (services.length === 0) {
-      return 'Mohon maaf Kak, saat ini belum ada layanan yang tersedia. Silakan hubungi admin untuk info lebih lanjut 🙏';
+      return 'Mohon maaf Kak, saat ini belum ada layanan yang tersedia. Silakan hubungi admin 🙏';
     }
-
     const lines = services.map(
       (s, i) => `${i + 1}. *${s.name}*\n   💰 ${formatRupiah(s.price)}`,
     );
-
     return (
       '🏃‍♀️ *Layanan Kania Happy*\n\n' +
       lines.join('\n\n') +
-      '\n\n_Ketik *2* untuk melihat jadwal, atau *3* untuk booking_ 😊'
+      '\n\n_Ketik *2* untuk jadwal, atau *3* untuk booking_ 😊'
     );
   }
 
   private async buildScheduleMessage(): Promise<string> {
     const occurrences = await this.scheduleService.getOccurrences();
-
     if (occurrences.length === 0) {
-      return 'Mohon maaf Kak, tidak ada jadwal kelas dalam waktu dekat. Silakan cek lagi nanti atau hubungi admin 🙏';
+      return 'Mohon maaf Kak, tidak ada jadwal dalam waktu dekat. Silakan cek lagi nanti 🙏';
     }
 
-    // Kelompokkan per tanggal
     const byDate = new Map<string, typeof occurrences>();
     for (const occ of occurrences) {
       const list = byDate.get(occ.date) ?? [];
@@ -152,7 +161,7 @@ export class MessageRouter {
       const items = occs.map(
         (o) =>
           `   • *${o.serviceName}*\n` +
-          `     ⏰ ${formatTimeDisplay(o.schedule.timeStart)} - ${formatTimeDisplay(o.schedule.timeEnd)} WIB\n` +
+          `     ⏰ ${formatTimeDisplay(o.schedule.timeStart)}–${formatTimeDisplay(o.schedule.timeEnd)} WIB\n` +
           `     💰 ${formatRupiah(o.servicePrice)}`,
       );
       blocks.push(`📅 *${dateLabel}*\n${items.join('\n')}`);
@@ -162,15 +171,6 @@ export class MessageRouter {
       '🗓️ *Jadwal Kelas Kania Happy*\n\n' +
       blocks.join('\n\n') +
       '\n\n_Ketik *3* untuk booking kelas_ 😊'
-    );
-  }
-
-  private buildBookingTeaser(): string {
-    return (
-      '📝 *Booking Kelas*\n\n' +
-      'Fitur booking sedang disiapkan ya Kak! 🙏\n\n' +
-      'Untuk saat ini, silakan hubungi admin kami langsung:\n' +
-      'Ketik *5* untuk info kontak admin 😊'
     );
   }
 
@@ -189,7 +189,6 @@ export class MessageRouter {
   private async buildContactMessage(): Promise<string> {
     const phone   = await this.settingsRepo.getValue('business_phone', '');
     const address = await this.settingsRepo.getValue('business_address', '');
-
     let msg = '📞 *Hubungi Admin Kania Happy*\n\n';
     if (phone)   msg += `📱 WhatsApp: ${phone}\n`;
     if (address) msg += `📍 Alamat: ${address}\n`;
@@ -200,13 +199,13 @@ export class MessageRouter {
   private buildFallbackMessage(): string {
     return (
       'Maaf Kak, saya belum bisa memahami pertanyaan tersebut 🙏\n\n' +
-      'Coba pilih menu berikut:\n' +
+      'Coba pilih menu:\n' +
       '1️⃣ Lihat layanan & harga\n' +
       '2️⃣ Cek jadwal kelas\n' +
       '3️⃣ Booking kelas\n' +
       '4️⃣ FAQ & info lainnya\n' +
       '5️⃣ Hubungi admin\n\n' +
-      'Atau ketik pertanyaan Kakak secara langsung 😊'
+      'Atau ketik pertanyaan Kakak langsung 😊'
     );
   }
 }

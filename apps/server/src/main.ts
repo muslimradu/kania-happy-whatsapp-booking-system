@@ -33,6 +33,12 @@ import { GetAvailableScheduleService } from '@application/schedule/GetAvailableS
 import { MessageRouter } from '@application/bot/MessageRouter';
 import { WhatsAppHandler } from '@presentation/whatsapp/WhatsAppHandler';
 
+// ── Booking Flow (M3) ───────────────────────────────────────────────────────
+import { ConversationStateStore } from '@infrastructure/state/ConversationStateStore';
+import { InvoiceGenerator } from '@application/booking/InvoiceGenerator';
+import { BookingService } from '@application/booking/BookingService';
+import { BookingFlowHandler } from '@application/booking/BookingFlowHandler';
+
 function registerDependencies(): void {
   // ── Infrastructure ─────────────────────────────────────────────────────────
   container.register(DI_TOKENS.BaileysClient,      () => new BaileysClient());
@@ -79,12 +85,38 @@ function registerDependencies(): void {
       container.resolve(DI_TOKENS.SettingsRepository),
     ));
 
+  // ── M3: Booking Flow ──────────────────────────────────────────────────────
+  container.register(DI_TOKENS.ConversationStateStore,
+    () => new ConversationStateStore());
+
+  container.register(DI_TOKENS.InvoiceGenerator,
+    () => new InvoiceGenerator());
+
+  container.register(DI_TOKENS.BookingService, () =>
+    new BookingService(
+      container.resolve(DI_TOKENS.BookingRepository),
+      container.resolve(DI_TOKENS.PaymentRepository),
+      container.resolve(DI_TOKENS.CustomerRepository),
+      container.resolve(DI_TOKENS.PaymentMethodRepository),
+      container.resolve(DI_TOKENS.GetAvailableScheduleService),
+      container.resolve(DI_TOKENS.InvoiceGenerator),
+    ));
+
+  container.register(DI_TOKENS.BookingFlowHandler, () =>
+    new BookingFlowHandler(
+      container.resolve(DI_TOKENS.ConversationStateStore),
+      container.resolve(DI_TOKENS.BookingService),
+      container.resolve(DI_TOKENS.CustomerRepository),
+    ));
+
   container.register(DI_TOKENS.MessageRouter, () =>
     new MessageRouter(
       container.resolve(DI_TOKENS.ServiceRepository),
       container.resolve(DI_TOKENS.SettingsRepository),
       container.resolve(DI_TOKENS.FaqLookupService),
       container.resolve(DI_TOKENS.GetAvailableScheduleService),
+      container.resolve(DI_TOKENS.BookingFlowHandler),
+      container.resolve(DI_TOKENS.ConversationStateStore),
     ));
 
   container.register(DI_TOKENS.WhatsAppHandler, () =>

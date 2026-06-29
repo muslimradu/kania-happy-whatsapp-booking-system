@@ -50,6 +50,12 @@ export const DI_TOKENS = {
   // ── Presentation ─────────────────────────────────────────────────────────────
   WhatsAppHandler: 'WhatsAppHandler',
 
+  // ── M3: Booking Flow ──────────────────────────────────────────────────────
+  ConversationStateStore: 'ConversationStateStore',
+  InvoiceGenerator:       'InvoiceGenerator',
+  BookingService:         'BookingService',
+  BookingFlowHandler:     'BookingFlowHandler',
+
   // ── Repositories ──────────────────────────────────────────────────────────
   ServiceRepository:   'ServiceRepository',
   ScheduleRepository:  'ScheduleRepository',

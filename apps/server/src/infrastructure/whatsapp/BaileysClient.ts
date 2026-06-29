@@ -144,6 +144,19 @@ export class BaileysClient {
     logger.debug(`BaileysClient: gambar dikirim ke ${to}`);
   }
 
+  /**
+   * Kirim gambar dari URL publik (misal URL gambar QRIS di Google Drive / ImgBB).
+   * Baileys mendukung pengiriman via `{ image: { url: '...' } }`.
+   */
+  async sendImageFromUrl(to: string, url: string, caption?: string): Promise<void> {
+    this.assertConnected();
+    await this.socket!.sendMessage(this.toJid(to), {
+      image: { url },
+      caption,
+    });
+    logger.debug(`BaileysClient: gambar dari URL dikirim ke ${to}`);
+  }
+
   async sendDocument(
     to:             string,
     documentBuffer: Buffer,
