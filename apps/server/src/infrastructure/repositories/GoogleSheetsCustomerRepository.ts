@@ -45,13 +45,15 @@ export class GoogleSheetsCustomerRepository
     const now = nowJakarta();
 
     if (existing) {
-      // Update nama jika berubah
-      if (existing.name !== data.name) {
+      // Update nama HANYA jika nama baru tidak kosong dan berbeda dari yang tersimpan
+      // Jangan timpa nama yang sudah diinput customer dengan string kosong
+      const newName = data.name.trim();
+      if (newName && newName !== existing.name && newName !== data.phone) {
         const rowIndex = await this.findRowIndex(COL.PHONE, data.phone);
         if (rowIndex !== -1) {
-          await this.updateCell(rowIndex, COL.NAME, data.name);
+          await this.updateCell(rowIndex, COL.NAME, newName);
         }
-        return { ...existing, name: data.name };
+        return { ...existing, name: newName };
       }
       return existing;
     }

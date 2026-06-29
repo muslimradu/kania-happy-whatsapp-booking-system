@@ -38,6 +38,7 @@ export type BookingStep =
   | 'CHOOSE_SERVICE'
   | 'CHOOSE_SCHEDULE'
   | 'INPUT_NAME'
+  | 'INPUT_PHONE'
   | 'CHOOSE_PAYMENT'
   | 'CONFIRM';
 
@@ -53,6 +54,8 @@ export interface BookingDraft {
   selectedOccurrence?: ScheduleOccurrence;
   /** Nama customer (diambil dari Customer sheet atau diinput saat flow) */
   customerName?: string;
+  /** Nomor HP yang diinput customer — dipakai sebagai phone di Booking & Customer sheet */
+  verifiedPhone?: string;
   /** Daftar payment method yang ditampilkan */
   paymentOptions?: PaymentMethod[];
   selectedPaymentMethod?: PaymentMethod;

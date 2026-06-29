@@ -151,7 +151,8 @@ export class BookingService {
     if (!selected) return null;
 
     const customer = await this.customerRepo.findByPhone(phone);
-    const needName = !customer?.name || customer.name === phone;
+    // Nama dianggap belum ada jika kosong, sama dengan nomor telepon, atau belum pernah diinput
+    const needName = !customer?.name || customer.name.trim() === '' || customer.name === phone;
 
     if (needName) {
       return {
@@ -230,6 +231,7 @@ export class BookingService {
   async confirmBooking(
     phone: string,
     customerName: string,
+    verifiedPhone: string | undefined,
     occurrence: ScheduleOccurrence,
     selectedPaymentMethod: PaymentMethod,
   ): Promise<BookingConfirmResult> {
@@ -250,7 +252,7 @@ export class BookingService {
       // 1. Buat Booking
       const booking = await this.bookingRepo.create({
         invoiceNumber,
-        customerPhone: phone,
+        customerPhone: verifiedPhone ?? phone,
         customerName,
         serviceId:       occurrence.schedule.serviceId,
         serviceName:     occurrence.serviceName,

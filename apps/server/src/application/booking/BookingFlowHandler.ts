@@ -61,6 +61,7 @@ export class BookingFlowHandler {
       case 'CHOOSE_SERVICE':  return this.stepChooseService(phone, draft, message);
       case 'CHOOSE_SCHEDULE': return this.stepChooseSchedule(phone, draft, message);
       case 'INPUT_NAME':      return this.stepInputName(phone, draft, message);
+      case 'INPUT_PHONE':     return this.stepInputPhone(phone, draft, message);
       case 'CHOOSE_PAYMENT':  return this.stepChoosePayment(phone, draft, message);
       case 'CONFIRM':         return this.stepConfirm(phone, draft, lower);
       default:
@@ -179,12 +180,68 @@ export class BookingFlowHandler {
       };
     }
 
-    // Simpan nama ke Customer sheet
-    await this.customerRepo.upsert({ phone, name }).catch((err) =>
-      logger.warn('BookingFlowHandler: gagal upsert customer name', { error: err }),
+    // Setelah nama → minta nomor HP
+    this.stateStore.set(phone, {
+      ...draft,
+      step: 'INPUT_PHONE',
+      customerName: name,
+    });
+
+    return {
+      messages: [
+        `Terima kasih *${name}* 😊\n\n` +
+        `Boleh minta nomor HP Kakak? (digunakan untuk reminder kelas)\n` +
+        `Contoh: *08123456789* atau *628123456789*\n\n` +
+        `_(Ketik *0* untuk batal)_`,
+      ],
+      done: false,
+    };
+  }
+
+  private async stepInputPhone(
+    phone: string,
+    draft: BookingDraft,
+    input: string,
+  ): Promise<FlowResult> {
+    const normalized = this.normalizeInputPhone(input.trim());
+
+    if (!normalized) {
+      return {
+        messages: [
+          'Nomor HP tidak valid Kak 🙏\n' +
+          'Mohon masukkan nomor yang benar ya.\n' +
+          'Contoh: *08123456789* atau *628123456789*',
+        ],
+        done: false,
+      };
+    }
+
+    // Simpan nama + nomor HP ke Customer sheet dengan phone yang valid
+    await this.customerRepo.upsert({ phone: normalized, name: draft.customerName! }).catch((err) =>
+      logger.warn('BookingFlowHandler: gagal upsert customer', { error: err }),
     );
 
-    return this.goToPayment(phone, { ...draft, customerName: name });
+    return this.goToPayment(phone, { ...draft, verifiedPhone: normalized });
+  }
+
+  /**
+   * Normalisasi nomor HP input customer ke format 628xxx.
+   * Menerima: '08xxx', '628xxx', '+628xxx', '8xxx' (tanpa leading 0)
+   * Kembalikan null jika tidak valid (bukan nomor Indonesia).
+   */
+  private normalizeInputPhone(raw: string): string | null {
+    const digits = raw.replace(/\D/g, '');
+
+    let normalized: string;
+    if (digits.startsWith('0'))       normalized = `62${digits.slice(1)}`;
+    else if (digits.startsWith('62')) normalized = digits;
+    else if (digits.startsWith('8'))  normalized = `62${digits}`;
+    else return null;
+
+    // Validasi panjang: 62 + 8-12 digit = 10-14 karakter total
+    if (normalized.length < 10 || normalized.length > 15) return null;
+
+    return normalized;
   }
 
   private async stepChoosePayment(
@@ -233,6 +290,7 @@ export class BookingFlowHandler {
     const result = await this.bookingService.confirmBooking(
       phone,
       draft.customerName!,
+      draft.verifiedPhone,
       draft.selectedOccurrence!,
       draft.selectedPaymentMethod!,
     );
@@ -259,6 +317,25 @@ export class BookingFlowHandler {
     phone: string,
     draft: Partial<BookingDraft> & { step?: BookingDraft['step'] },
   ): Promise<FlowResult> {
+    // Jika customer sudah punya verifiedPhone di draft, gunakan itu
+    // Jika belum (customer lama yang sudah punya nama), minta nomor HP
+    const needPhone = !(draft as BookingDraft).verifiedPhone;
+
+    if (needPhone) {
+      this.stateStore.set(phone, {
+        ...(draft as BookingDraft),
+        step: 'INPUT_PHONE',
+      });
+      return {
+        messages: [
+          `Boleh minta nomor HP Kakak? (digunakan untuk reminder kelas) 😊\n` +
+          `Contoh: *08123456789* atau *628123456789*\n\n` +
+          `_(Ketik *0* untuk batal)_`,
+        ],
+        done: false,
+      };
+    }
+
     const { message, paymentOptions } = await this.bookingService.buildPaymentOptions();
 
     if (paymentOptions.length === 0) {

@@ -2,16 +2,20 @@ import type { IncomingMessage } from '@infrastructure/whatsapp/BaileysClient';
 import type { BaileysClient } from '@infrastructure/whatsapp/BaileysClient';
 import type { ITakeoverRepository, ICustomerRepository } from '@domain/repositories';
 import type { MessageRouter } from '@application/bot/MessageRouter';
-import { jidToPhone } from '@shared/utils/phoneFormatter';
+import { jidToPhone, normalizePhone } from '@shared/utils/phoneFormatter';
 import { logger } from '@infrastructure/logger/Logger';
 
 /**
  * WhatsAppHandler (Presentation Layer)
  *
- * Perubahan dari M2:
- *  - `handle()` sekarang menerima RouterResult (array messages + optional qrisUrl).
- *  - Kirim pesan satu per satu secara berurutan (await each).
- *  - Jika ada qrisUrl, kirim gambar QRIS setelah semua pesan teks.
+ * Perubahan M3-fix:
+ *  1. Nomor WA disimpan dalam format E.164 bersih (628xxx) via normalizePhone().
+ *     Baileys kadang mengirim JID dalam format internal WA (mis. 273xxx)
+ *     bukan format internasional — normalizePhone() memastikan konsistensi.
+ *  2. Nama customer TIDAK lagi diambil dari pushName (nama kontak WA).
+ *     Customer baru akan diminta menginput nama sendiri di step booking (INPUT_NAME).
+ *     upsertCustomer() hanya membuat record baru dengan name='' jika belum ada,
+ *     sehingga flow booking tahu customer ini belum punya nama.
  */
 export class WhatsAppHandler {
   constructor(
@@ -29,7 +33,8 @@ export class WhatsAppHandler {
   private async handleMessage(msg: IncomingMessage): Promise<void> {
     if (!msg.body.trim()) return;
 
-    const phone = jidToPhone(msg.from);
+    // Normalisasi nomor ke format 628xxx yang konsisten
+    const phone = normalizePhone(jidToPhone(msg.from));
 
     logger.info('WhatsAppHandler: pesan masuk', {
       phone,
@@ -50,22 +55,20 @@ export class WhatsAppHandler {
       );
     }
 
-    // ── 2. Upsert customer ───────────────────────────────────────────────────
-    await this.upsertCustomer(phone, msg.pushName);
+    // ── 2. Pastikan customer ada di sheet (tanpa isi nama dari pushName) ──────
+    await this.ensureCustomerExists(phone);
 
     // ── 3. Route & balas ─────────────────────────────────────────────────────
     try {
       const result = await this.messageRouter.handle(phone, msg.body);
 
-      // Kirim setiap pesan teks berurutan
       for (const text of result.messages) {
         await this.baileysClient.sendText(msg.from, text);
       }
 
-      // Kirim gambar QRIS jika ada
       if (result.qrisUrl) {
         await this.baileysClient
-          .sendImage(msg.from, result.qrisUrl, 'Scan QRIS ini untuk pembayaran 📱')
+          .sendImageFromUrl(msg.from, result.qrisUrl, 'Scan QRIS ini untuk pembayaran 📱')
           .catch((err) =>
             logger.warn('WhatsAppHandler: gagal kirim gambar QRIS', { error: err }),
           );
@@ -87,12 +90,25 @@ export class WhatsAppHandler {
     }
   }
 
-  private async upsertCustomer(phone: string, pushName?: string): Promise<void> {
+  /**
+   * Pastikan customer sudah ada di sheet Customer.
+   * Jika belum ada, buat record baru dengan name = '' (kosong).
+   * Nama akan diisi saat customer pertama kali booking (step INPUT_NAME).
+   *
+   * TIDAK menggunakan pushName — nama kontak WA rawan berbeda dengan
+   * nama asli customer dan tidak bisa diandalkan.
+   */
+  private async ensureCustomerExists(phone: string): Promise<void> {
     try {
-      const name = pushName?.trim() || phone;
-      await this.customerRepo.upsert({ phone, name });
+      const existing = await this.customerRepo.findByPhone(phone);
+      if (!existing) {
+        // Buat record baru, nama kosong — akan diisi saat booking
+        await this.customerRepo.upsert({ phone, name: '' });
+        logger.debug('WhatsAppHandler: customer baru terdaftar', { phone });
+      }
     } catch (err) {
-      logger.warn('WhatsAppHandler: gagal upsert customer', { phone, error: err });
+      // Non-fatal
+      logger.warn('WhatsAppHandler: gagal ensure customer', { phone, error: err });
     }
   }
 }
