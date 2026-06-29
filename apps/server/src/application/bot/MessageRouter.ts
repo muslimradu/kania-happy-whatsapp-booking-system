@@ -18,7 +18,7 @@ export type Intent =
 const GREETING_KEYWORDS = ['halo', 'hai', 'hi', 'hei', 'hello', 'assalamualaikum', 'selamat', 'permisi', 'pagi', 'siang', 'sore', 'malam'];
 const SERVICE_KEYWORDS  = ['layanan', 'kelas', 'program', 'senam', 'harga', 'tarif', 'biaya', 'paket', 'info', 'daftar', 'ada apa saja', 'apa saja'];
 const SCHEDULE_KEYWORDS = ['jadwal', 'jam', 'hari', 'kapan', 'schedule', 'waktu'];
-const BOOKING_KEYWORDS  = ['booking', 'pesan', 'reservasi', 'ikut', 'gabung', 'mau daftar', 'mau ikut', 'mau booking', 'daftar kelas'];
+const BOOKING_KEYWORDS  = ['booking', 'reservasi', 'mau ikut', 'mau gabung', 'mau daftar', 'mau booking', 'mau pesan', 'pesan kelas', 'pesan tempat', 'daftar kelas'];
 
 /**
  * MessageRouter

@@ -32,14 +32,14 @@ Sistem booking berbasis WhatsApp untuk **Sanggar Senam Kania Happy**. Bot WhatsA
 
 ### Fitur Utama
 
-- 🤖 **Bot WhatsApp otomatis** — FAQ, layanan, jadwal, booking end-to-end
-- 📅 **Booking Flow** — pilih layanan → jadwal → nama → metode bayar → invoice
-- 💳 **3 Metode Pembayaran** — Cash, Transfer Bank, QRIS
-- ⏰ **Reminder Otomatis** — H-1 dan Hari H untuk semua booking aktif
-- 👤 **Human Takeover** — admin override bot per nomor WA (auto-resume 30 menit)
-- 🧠 **AI Fallback** — OpenAI menjawab pertanyaan di luar FAQ (dengan guardrail topik)
-- 📊 **Dashboard Admin** — CRUD semua entitas, broadcast, settings, audit log
-- 📋 **Google Sheets sebagai DB** — mudah dicek & diedit langsung oleh admin non-teknis
+- 🤖 **Bot WhatsApp otomatis** — FAQ, layanan, jadwal, booking end-to-end ✅
+- 📅 **Booking Flow** — pilih layanan → jadwal → nama (jika baru) → metode bayar → konfirmasi → invoice ✅
+- 💳 **3 Metode Pembayaran** — Cash, Transfer Bank, QRIS, dikelola dari sheet `Payment Method` (bukan JSON di Settings) ✅
+- ⏰ **Reminder Otomatis** — H-1 dan Hari H untuk semua booking aktif (🔜 M5)
+- 👤 **Human Takeover** — admin override bot per nomor WA (auto-resume 30 menit) (🔜 M6)
+- 🧠 **AI Fallback** — OpenAI menjawab pertanyaan di luar FAQ (dengan guardrail topik) (🔜 M7)
+- 📊 **Dashboard Admin** — CRUD semua entitas, broadcast, settings, audit log (🔜 M8-M9)
+- 📋 **Google Sheets sebagai DB** — mudah dicek & diedit langsung oleh admin non-teknis ✅
 
 ---
 
@@ -86,32 +86,40 @@ kania-happy/
 │   └── server/                  # Backend utama (Bot + REST API)
 │       ├── src/
 │       │   ├── domain/
-│       │   │   ├── entities/    # Pure domain objects (Service, Booking, dll.)
+│       │   │   ├── entities/    # Pure domain objects (Service, Schedule, Booking, Payment, PaymentMethod, dll.)
 │       │   │   └── repositories/# Interface IXxxRepository (kontrak, bukan implementasi)
-│       │   ├── application/     # Use cases / service layer (coming soon)
+│       │   ├── application/     # Use cases / service layer
+│       │   │   ├── faq/             # FaqLookupService
+│       │   │   ├── schedule/        # GetAvailableScheduleService (generate occurrence mingguan)
+│       │   │   ├── booking/         # BookingService, BookingFlowHandler, InvoiceGenerator
+│       │   │   └── bot/             # MessageRouter (deteksi intent & routing)
 │       │   ├── infrastructure/
 │       │   │   ├── google-sheets/ # GoogleSheetsClient, SheetCache, BaseSheetRepository
 │       │   │   ├── logger/        # Winston logger
-│       │   │   ├── repositories/  # Implementasi konkret GoogleSheetsXxxRepository
+│       │   │   ├── repositories/  # Implementasi konkret GoogleSheetsXxxRepository (termasuk PaymentMethod)
+│       │   │   ├── state/         # ConversationStateStore (state booking per nomor WA, TTL 15 menit)
 │       │   │   └── whatsapp/      # BaileysClient (koneksi & kirim pesan WA)
 │       │   ├── presentation/
-│       │   │   └── http/middlewares/ # errorHandler, requestLogger
+│       │   │   ├── http/middlewares/ # errorHandler, requestLogger
+│       │   │   └── whatsapp/         # WhatsAppHandler (terima pesan masuk dari Baileys)
 │       │   └── shared/
 │       │       ├── config/env.ts    # Env validator (Zod) — fail-fast jika tidak lengkap
 │       │       ├── di/container.ts  # DI Container manual + DI_TOKENS
 │       │       └── types/index.ts   # AppError, ApiSuccessResponse, dll.
+│       ├── setup-script/        # Script setup awal Google Spreadsheet (lihat di bawah)
+│       │   ├── setup-spreadsheet.ts # Buat semua sheet + header + seed data otomatis
+│       │   ├── check-sheets.ts      # Verifikasi sheet yang sudah dibuat
+│       │   └── .env.example
 │       ├── tests/
 │       │   └── unit/
-│       │       └── repositories.test.ts
+│       │       ├── repositories.test.ts # Test M1: Service/Schedule/Faq repository
+│       │       ├── m2-services.test.ts  # Test M2: FaqLookup, GetAvailableSchedule, MessageRouter
+│       │       └── m3-booking.test.ts   # Test M3: InvoiceGenerator, ConversationStateStore, BookingService, BookingFlowHandler
 │       ├── .env.example
 │       ├── package.json
 │       ├── tsconfig.json
 │       ├── tsconfig.test.json   # Konfigurasi TypeScript khusus untuk folder tests/
 │       └── vitest.config.ts
-├── setup-script/                # Script setup awal Google Spreadsheet
-│   ├── setup-spreadsheet.ts     # Buat semua sheet + header + data contoh
-│   ├── .env.example
-│   └── package.json
 └── docs/
     └── 01-DESIGN-DOCUMENT.md    # Analisis kebutuhan, arsitektur, desain detail
 ```
@@ -159,22 +167,25 @@ cd kania-happy
 ### 2. Setup Google Spreadsheet (sekali saja)
 
 ```bash
-cd setup-script
+cd apps/server
 npm install
 cp .env.example .env
 # Edit .env: isi GOOGLE_SPREADSHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY
-npm run setup
+npx tsx setup-script/setup-spreadsheet.ts
 ```
 
-Script ini akan membuat 10 sheet beserta header, data contoh, dan format otomatis. Lihat [Setup Google Spreadsheet](#setup-google-spreadsheet) untuk detail lengkap.
+Script ini akan membuat 11 sheet beserta header, data contoh, dan format otomatis. Lihat [Setup Google Spreadsheet](#setup-google-spreadsheet) untuk detail lengkap.
+
+Verifikasi sheet sudah benar:
+
+```bash
+npx tsx setup-script/check-sheets.ts
+```
 
 ### 3. Jalankan server
 
 ```bash
-cd apps/server
-npm install
-cp .env.example .env
-# Edit .env dengan kredensial lengkap (lihat tabel variabel environment di bawah)
+# masih di folder apps/server, .env sudah terisi dari langkah 2
 npm run dev
 ```
 
@@ -205,40 +216,41 @@ Setelah server berjalan, QR code akan muncul di terminal. Scan dengan WhatsApp d
 ### Langkah 3 — Jalankan Setup Script
 
 ```bash
-cd setup-script
-npm run setup
+cd apps/server
+npx tsx setup-script/setup-spreadsheet.ts
 ```
 
-Script ini membuat **10 sheet** secara otomatis dan aman dijalankan berulang kali (sheet yang sudah ada akan di-skip):
+Script ini membuat **11 sheet** secara otomatis dan aman dijalankan berulang kali (sheet yang sudah ada akan di-skip):
 
 | Sheet | Keterangan |
 |-------|-----------|
 | `Services` | Daftar layanan/kelas yang tersedia |
-| `Schedule` | Jadwal kelas (hari, jam, recurring mingguan) |
+| `Schedule` | Jadwal kelas — template mingguan (kolom `day_of_week` diisi NAMA hari, contoh "Senin", bukan angka) |
 | `Booking` | Data booking customer |
 | `Payment` | Data pembayaran & verifikasi |
+| `Payment Method` | Daftar metode pembayaran (Cash/Transfer/QRIS) — admin tambah/edit/hapus rekening & QRIS di sini, langsung sebagai baris, **bukan** JSON di Settings |
 | `Customer` | Data customer (nama, nomor WA) |
 | `FAQ` | Pertanyaan & jawaban otomatis bot |
-| `Settings` | Konfigurasi bot & bisnis |
+| `Settings` | Konfigurasi operasional tunggal (jam buka, timeout takeover, pesan sambutan, dll — bukan daftar/list) |
 | `Admin Log` | Audit trail aktivitas admin |
 | `Broadcast` | Pesan massal ke customer |
 | `Takeover State` | Status human takeover per nomor WA |
 
 ### Langkah 4 — Isi Data Awal (Manual)
 
-Setelah script selesai, update nilai di sheet `Settings`:
+Setelah script selesai, sheet `Payment Method` sudah terisi 1 baris contoh per tipe (Cash, Transfer, QRIS) — **edit langsung** nomor rekening/nama bank/URL gambar QRIS sesuai data asli Kania Happy, atau tambah baris baru untuk rekening lain.
+
+Update juga nilai di sheet `Settings` sesuai kebutuhan:
 
 | Key | Isi dengan |
 |-----|-----------|
-| `qris_image_url` | URL publik gambar QRIS (upload ke Google Drive / ImgBB) |
-| `bank_account_number` | Nomor rekening bank |
-| `bank_account_name` | Nama pemilik rekening |
-| `bank_name` | Nama bank (BCA / Mandiri / dll.) |
 | `business_address` | Alamat lengkap sanggar |
 | `business_phone` | Nomor WA bisnis format `628xxx` |
 | `welcome_message` | Sesuaikan pesan sambutan bot |
+| `schedule_lookahead_days` | Berapa hari ke depan jadwal ditampilkan ke customer (default `7`) |
+| `takeover_timeout_minutes` | Durasi bot non-aktif setelah admin takeover (default `30`) |
 
-Tambahkan data layanan di sheet `Services` dan jadwal di sheet `Schedule` melalui dashboard admin atau langsung di spreadsheet.
+Tambahkan data layanan di sheet `Services` dan jadwal mingguan di sheet `Schedule` (kolom hari diisi nama hari seperti "Senin", "Selasa", dst — supaya admin mudah mengedit tanpa menghafal mapping angka).
 
 ---
 
@@ -307,7 +319,13 @@ npm run test          # jalankan sekali
 npm run test:watch    # watch mode (re-run saat file berubah)
 ```
 
-Vitest akan menemukan test di `tests/**/*.test.ts`. Saat ini tersedia **11 unit test** untuk `ServiceRepository`, `ScheduleRepository`, dan `FaqRepository` menggunakan mock client & cache.
+Vitest akan menemukan test di `tests/**/*.test.ts`. Saat ini tersedia **54 unit test** tersebar di 3 file:
+
+| File | Cakupan |
+|------|---------|
+| `repositories.test.ts` | M1 — `ServiceRepository`, `ScheduleRepository`, `FaqRepository` (mock client & cache) |
+| `m2-services.test.ts` | M2 — `FaqLookupService`, `GetAvailableScheduleService`, `MessageRouter` (routing intent, fallback, menu) |
+| `m3-booking.test.ts` | M3 — `InvoiceGenerator`, `ConversationStateStore`, `BookingService`, `BookingFlowHandler` (happy path booking sampai konfirmasi) |
 
 ---
 
@@ -333,22 +351,22 @@ Di folder `apps/server/`:
 | Milestone | Status | Deskripsi |
 |-----------|--------|-----------|
 | **M0** — Foundation + Baileys | ✅ Selesai | Clean Architecture, TypeScript, Logger, Error Handler, DI Container, Express, BaileysClient |
-| **M1** — Data Layer | ✅ Selesai | Domain entities, Repository interfaces, GoogleSheetsClient, SheetCache, 10 repository implementasi, unit test |
-| **M2** — Bot Read-only | 🔜 Berikutnya | Webhook handler, FAQ lookup, tampilkan layanan & jadwal |
-| **M3** — Booking Flow | 📋 Planned | State machine booking, invoice generator |
-| **M4** — Payment Flow | 📋 Planned | Cash, Transfer, QRIS — masing-masing dengan status flow berbeda |
+| **M1** — Data Layer | ✅ Selesai | Domain entities, Repository interfaces, GoogleSheetsClient, SheetCache, 11 repository implementasi, unit test |
+| **M2** — Bot Read-only | ✅ Selesai | Webhook handler, MessageRouter, FAQ lookup, tampilkan layanan & jadwal |
+| **M3** — Booking Flow | ✅ Selesai | `ConversationStateStore`, `BookingService`, `BookingFlowHandler`, `InvoiceGenerator` — booking end-to-end sampai konfirmasi |
+| **M4** — Payment Flow | 🔜 Berikutnya | Verifikasi pembayaran oleh admin (Transfer/QRIS → Paid), endpoint REST untuk dashboard |
 | **M5** — Reminder | 📋 Planned | Cron H-1 & Hari H untuk semua booking aktif |
 | **M6** — Human Takeover | 📋 Planned | Admin override bot per nomor WA, auto-resume setelah timeout |
 | **M7** — AI Fallback | 📋 Planned | OpenAI untuk pertanyaan di luar FAQ, dengan guardrail topik |
 | **M8–M9** — Dashboard | 📋 Planned | Dashboard React + Vite untuk admin |
+| **M10** — Testing & Docs Final | 📋 Planned | Pemantapan test, dokumentasi API lengkap |
 
 ---
 
 ## Dokumentasi Lanjutan
 
 - [`docs/01-DESIGN-DOCUMENT.md`](docs/01-DESIGN-DOCUMENT.md) — Analisis kebutuhan lengkap, arsitektur detail, risk assessment, desain database, dan flow diagram
-- [`apps/server/README.md`](apps/server/README.md) — Dokumentasi teknis server (struktur folder, konfigurasi, troubleshooting)
-- [`setup-script/README.md`](setup-script/README.md) — Panduan setup Google Spreadsheet secara detail
+- [`apps/server/README.md`](apps/server/README.md) — Dokumentasi teknis server (struktur folder, konfigurasi, troubleshooting, status milestone detail)
 
 ---
 

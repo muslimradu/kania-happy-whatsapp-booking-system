@@ -1,4 +1,4 @@
-# Kania Happy — Server (M2: Bot Read-only)
+# Kania Happy — Server (M3: Booking Flow)
 
 Aplikasi backend **WhatsApp Booking System** untuk Sanggar Senam Kania Happy.
 Dibangun dengan Clean Architecture, Repository Pattern, dan Service Layer di atas Node.js + TypeScript.
@@ -22,7 +22,7 @@ Dibangun dengan Clean Architecture, Repository Pattern, dan Service Layer di ata
 - ✅ `GoogleSheetsClient` — thin wrapper Google Sheets API v4
 - ✅ `SheetCache` — cache in-memory dengan TTL
 - ✅ `BaseSheetRepository` — abstract class dengan helper read/write
-- ✅ 10 Repository implementasi (Service, Schedule, Booking, Payment, Customer, Faq, Settings, AdminLog, Broadcast, Takeover)
+- ✅ 11 Repository implementasi (Service, Schedule, Booking, Payment, **Payment Method**, Customer, Faq, Settings, AdminLog, Broadcast, Takeover)
 - ✅ Unit test repository dengan mock client & cache
 
 ### M2 — Bot Read-only
@@ -40,16 +40,37 @@ Dibangun dengan Clean Architecture, Repository Pattern, dan Service Layer di ata
 | `halo`, `hai`, `selamat pagi`, dll. | Welcome message + menu |
 | `1` atau kata kunci layanan/harga | Daftar layanan aktif + harga |
 | `2` atau kata kunci jadwal/jam | Jadwal kelas N hari ke depan |
-| `3` atau kata kunci booking/daftar | Teaser booking (M3) |
+| `3` atau kata kunci booking (`mau booking`, `reservasi`, dll.) | Mulai booking flow (M3) |
 | `4` | Panduan tanya FAQ |
 | `5` | Info kontak admin |
 | Pertanyaan umum | Cari di FAQ sheet |
 | Tidak dikenal | Fallback + tampilkan menu |
 
+> ⚠️ **Catatan keyword booking**: kata `'pesan'`, `'ikut'`, `'gabung'` SENGAJA tidak dipakai sebagai trigger tunggal — kata-kata itu terlalu ambigu dalam Bahasa Indonesia (bisa berarti "message"/"ikutan ngobrol" dll, bukan "order") dan menyebabkan false-positive masuk ke booking flow. Gunakan frasa yang lebih spesifik seperti `'mau booking'`, `'mau ikut'`, `'pesan kelas'`.
+
+### M3 — Booking Flow
+- ✅ **`ConversationStateStore`** — state per nomor WA (in-memory, TTL 15 menit), step: `CHOOSE_SERVICE` → `CHOOSE_SCHEDULE` → `INPUT_NAME` (jika customer baru) → `CHOOSE_PAYMENT` → `CONFIRM`
+- ✅ **`BookingService`** — business logic: mulai booking (`startBooking`), proses pemilihan tiap step, generate ringkasan konfirmasi, `confirmBooking` (insert ke sheet `Booking` + `Payment`)
+- ✅ **`BookingFlowHandler`** — orkestrasi step-by-step, validasi input tiap langkah, handle pembatalan (`ketik "0"` kapan saja)
+- ✅ **`InvoiceGenerator`** — format `INV-YYYYMMDD-XXXX`, sequence harian unik
+- ✅ Metode pembayaran (Cash/Transfer/QRIS) dibaca dari sheet **`Payment Method`** (bukan hardcode) — pesan konfirmasi otomatis menyesuaikan instruksi sesuai tipe metode yang dipilih
+- ✅ Unit test M3 (`InvoiceGenerator`, `ConversationStateStore`, `BookingService`, `BookingFlowHandler` happy path + edge case input tidak valid)
+
+**Flow booking (ringkas):**
+
+| Step | Customer Input | Bot Response |
+|------|----------------|---------------|
+| 1 | `"mau booking"` / `"3"` | Daftar layanan aktif, minta pilih nomor |
+| 2 (`CHOOSE_SERVICE`) | Nomor layanan | Daftar jadwal occurrence tersedia |
+| 3 (`CHOOSE_SCHEDULE`) | Nomor jadwal | Jika customer baru → minta nama; jika sudah ada → lanjut ke payment |
+| 3b (`INPUT_NAME`) | Nama | Lanjut ke pilihan metode pembayaran |
+| 4 (`CHOOSE_PAYMENT`) | Nomor metode bayar | Ringkasan booking + minta konfirmasi "ya" |
+| 5 (`CONFIRM`) | `"ya"` | Booking + Payment tersimpan, invoice dikirim, state di-clear |
+| kapan saja | `"0"` | Batalkan flow, state di-clear |
+
 ## Yang BELUM ada (menyusul di milestone berikutnya)
 
-- M3 — Booking Flow: state machine, invoice generator
-- M4 — Payment Flow: 3 metode bayar (Cash, Transfer, QRIS)
+- M4 — Payment Flow: endpoint verifikasi pembayaran oleh admin (Transfer/QRIS → Paid)
 - M5 — Reminder: cron H-1 & Hari H
 - M6 — Human Takeover: admin override bot
 - M7 — AI Fallback: OpenAI untuk pertanyaan di luar FAQ
@@ -69,30 +90,34 @@ cp .env.example .env
 ### 2. Setup Google Spreadsheet
 
 ```bash
-cd setup-script
-cp .env.example .env   # isi dengan kredensial yang sama
-npx tsx setup-spreadsheet.ts
+# masih di folder apps/server (.env sudah terisi dari langkah 1)
+npx tsx setup-script/setup-spreadsheet.ts
 ```
 
 Script ini akan:
-- Membuat 10 sheet dengan header yang benar
-- Mengisi seed data (contoh Services, Schedule, FAQ)
+- Membuat 11 sheet dengan header yang benar (termasuk `Payment Method`)
+- Mengisi seed data (contoh Services, Schedule, FAQ, Payment Method)
 - Mengisi default Settings
 - Memformat header (bold, freeze row 1)
 - Menghapus "Sheet1" default
 
-### 3. Update Settings di Spreadsheet
+Verifikasi:
+```bash
+npx tsx setup-script/check-sheets.ts
+```
 
-Setelah script selesai, buka spreadsheet dan isi nilai kosong di sheet **Settings**:
+### 3. Isi data asli di Spreadsheet
 
-| Key | Keterangan |
-|-----|------------|
-| `bank_account_number` | Nomor rekening untuk Transfer |
-| `bank_name` | Nama bank, contoh: BCA |
-| `bank_holder_name` | Nama pemilik rekening |
-| `qris_image_url` | URL gambar QRIS (upload ke Google Drive/CDN) |
-| `business_address` | Alamat sanggar |
-| `business_phone` | Nomor WA admin |
+Setelah script selesai, buka spreadsheet dan **edit baris contoh** di sheet berikut:
+
+| Sheet | Yang perlu diisi/diedit |
+|-------|------|
+| `Payment Method` | Ganti nomor rekening, nama bank, nama pemilik, URL gambar QRIS sesuai data asli. Tambah baris baru jika ada rekening lain. Set `is_active=FALSE` untuk menyembunyikan metode yang tidak dipakai. |
+| `Settings` | `business_address`, `business_phone`, `welcome_message`, dll (lihat tabel di `docs/01-DESIGN-DOCUMENT.md` §5.8) |
+| `Services` | Layanan/kelas asli Kania Happy |
+| `Schedule` | Jadwal mingguan asli — kolom `day_of_week` diisi nama hari ("Senin", dst), bukan angka |
+
+> Catatan: sebelumnya rekening/QRIS disimpan sebagai JSON di key `payment_methods` pada sheet `Settings`. Ini sudah **dipindah** ke sheet `Payment Method` tersendiri (1 baris = 1 metode) agar admin non-teknis bisa CRUD langsung tanpa mengedit JSON.
 
 ### 4. Jalankan server
 
@@ -114,20 +139,26 @@ npm run test
 ```
 apps/server/
 ├── setup-script/
-│   ├── setup-spreadsheet.ts   # Jalankan sekali untuk setup Spreadsheet
+│   ├── setup-spreadsheet.ts   # Jalankan sekali untuk setup Spreadsheet (npx tsx setup-script/setup-spreadsheet.ts)
+│   ├── check-sheets.ts        # Verifikasi sheet yang sudah dibuat
 │   └── .env.example
 ├── src/
 │   ├── application/
 │   │   ├── bot/MessageRouter.ts
 │   │   ├── faq/FaqLookupService.ts
-│   │   └── schedule/GetAvailableScheduleService.ts
+│   │   ├── schedule/GetAvailableScheduleService.ts
+│   │   └── booking/
+│   │       ├── BookingService.ts
+│   │       ├── BookingFlowHandler.ts
+│   │       └── InvoiceGenerator.ts
 │   ├── domain/
-│   │   ├── entities/
+│   │   ├── entities/          # termasuk PaymentMethod.ts
 │   │   └── repositories/
 │   ├── infrastructure/
 │   │   ├── google-sheets/
 │   │   ├── logger/
-│   │   ├── repositories/
+│   │   ├── repositories/      # termasuk GoogleSheetsPaymentMethodRepository.ts
+│   │   ├── state/ConversationStateStore.ts
 │   │   └── whatsapp/BaileysClient.ts
 │   ├── presentation/
 │   │   ├── http/middlewares/
@@ -139,7 +170,8 @@ apps/server/
 │       └── utils/
 ├── tests/unit/
 │   ├── repositories.test.ts   # M1: repository tests
-│   └── m2-services.test.ts    # M2: service & router tests
+│   ├── m2-services.test.ts    # M2: service & router tests
+│   └── m3-booking.test.ts     # M3: booking flow tests
 ├── tsconfig.json
 ├── tsconfig.test.json
 └── vitest.config.ts
@@ -165,3 +197,7 @@ Lihat `.env.example` untuk daftar lengkap. Variabel wajib:
 - Sheet `Takeover State` menyimpan state live admin takeover — bukan audit trail. Audit trail ada di `Admin Log`.
 - Kolom `keyword` di sheet FAQ dipisah koma: `harga,biaya,tarif,berapa`. Matching case-insensitive substring.
 - `GetAvailableScheduleService` menggunakan `schedule_lookahead_days` dari sheet Settings (default 7 hari).
+- Sheet `Schedule`, kolom `day_of_week` diisi **nama hari** ("Senin", "Selasa", dst), bukan angka — supaya admin bisa langsung baca & edit jadwal tanpa menghafal mapping. Konversi ke angka (untuk hitung tanggal occurrence) dilakukan otomatis di `GoogleSheetsScheduleRepository`.
+- Rekening/QRIS disimpan di sheet **`Payment Method`** (1 baris = 1 metode), bukan JSON di Settings — admin tambah/edit/nonaktifkan metode pembayaran langsung sebagai baris Spreadsheet.
+- State booking customer (`ConversationStateStore`) disimpan **in-memory**, TTL 15 menit — jika server restart, semua customer yang sedang di tengah proses booking harus mulai ulang dari awal. Ini sengaja untuk MVP; jika perlu persisten lintas restart, pindahkan ke sheet/storage terpisah di milestone mendatang.
+- Keyword trigger booking di `MessageRouter` SENGAJA menghindari kata tunggal yang ambigu (`'pesan'`, `'ikut'`, `'gabung'`) — pakai frasa lebih spesifik (`'mau booking'`, `'pesan kelas'`, dst) agar tidak salah trigger di kalimat yang tidak bermaksud booking.
