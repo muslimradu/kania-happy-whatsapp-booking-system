@@ -2,8 +2,8 @@ import type { IServiceRepository, ISettingsRepository } from '@domain/repositori
 import type { FaqLookupService } from '@application/faq/FaqLookupService';
 import type { GetAvailableScheduleService } from '@application/schedule/GetAvailableScheduleService';
 import type { BookingFlowHandler } from '@application/booking/BookingFlowHandler';
+import type { AiFallbackService } from '@application/ai/AiFallbackService';
 import type { ConversationStateStore } from '@infrastructure/state/ConversationStateStore';
-import { DAY_NAMES } from '@domain/entities/Schedule';
 import { formatDateDisplay, formatTimeDisplay, formatRupiah } from '@shared/utils/dateHelper';
 import { logger } from '@infrastructure/logger/Logger';
 
@@ -44,6 +44,7 @@ export class MessageRouter {
     private readonly scheduleService: GetAvailableScheduleService,
     private readonly bookingFlowHandler: BookingFlowHandler,
     private readonly stateStore: ConversationStateStore,
+    private readonly aiFallbackService: AiFallbackService,
   ) {}
 
   async handle(phone: string, message: string): Promise<RouterResult> {
@@ -91,8 +92,8 @@ export class MessageRouter {
       return { messages: [faq.answer] };
     }
 
-    // Fallback
-    return { messages: [this.buildFallbackMessage()] };
+    // Fallback — coba AI dulu (jika aktif), baru pesan menu statis
+    return { messages: [await this.buildFallbackMessage(trimmed)] };
   }
 
   // ── Private builders ────────────────────────────────────────────────────────
@@ -196,7 +197,13 @@ export class MessageRouter {
     return msg;
   }
 
-  private buildFallbackMessage(): string {
+  private async buildFallbackMessage(originalQuestion: string): Promise<string> {
+    const aiEnabled = await this.aiFallbackService.isEnabled();
+
+    if (aiEnabled) {
+      return this.aiFallbackService.answer(originalQuestion);
+    }
+
     return (
       'Maaf Kak, saya belum bisa memahami pertanyaan tersebut 🙏\n\n' +
       'Coba pilih menu:\n' +

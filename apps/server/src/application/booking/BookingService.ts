@@ -63,7 +63,7 @@ export class BookingService {
 
   // ── Step 1: Mulai booking — tampilkan daftar layanan ────────────────────────
 
-  async startBooking(phone: string): Promise<StartBookingResult> {
+  async startBooking(_phone: string): Promise<StartBookingResult> {
     const occurrences = await this.scheduleService.getOccurrences();
 
     // Kumpulkan layanan unik yang punya jadwal tersedia

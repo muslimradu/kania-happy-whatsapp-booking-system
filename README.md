@@ -35,10 +35,12 @@ Sistem booking berbasis WhatsApp untuk **Sanggar Senam Kania Happy**. Bot WhatsA
 - 🤖 **Bot WhatsApp otomatis** — FAQ, layanan, jadwal, booking end-to-end ✅
 - 📅 **Booking Flow** — pilih layanan → jadwal → nama (jika baru) → metode bayar → konfirmasi → invoice ✅
 - 💳 **3 Metode Pembayaran** — Cash, Transfer Bank, QRIS, dikelola dari sheet `Payment Method` (bukan JSON di Settings) ✅
-- ⏰ **Reminder Otomatis** — H-1 dan Hari H untuk semua booking aktif (🔜 M5)
-- 👤 **Human Takeover** — admin override bot per nomor WA (auto-resume 30 menit) (🔜 M6)
-- 🧠 **AI Fallback** — OpenAI menjawab pertanyaan di luar FAQ (dengan guardrail topik) (🔜 M7)
+- ⏰ **Reminder Otomatis** — H-1 dan Hari H untuk semua booking aktif ✅
+- 💰 **Verifikasi Pembayaran** — Admin approve/reject Transfer & QRIS via REST API, auto-update status booking & notifikasi WA ✅
+- 👤 **Human Takeover** — admin override bot per nomor WA (auto-resume timeout, cleanup terjadwal) ✅
+- 🧠 **AI Fallback** — OpenAI menjawab pertanyaan di luar FAQ (dengan guardrail topik & FAQ sebagai konteks) ✅
 - 📊 **Dashboard Admin** — CRUD semua entitas, broadcast, settings, audit log (🔜 M8-M9)
+- 🔐 **Auth Admin** — Login JWT untuk seluruh endpoint REST admin ✅
 - 📋 **Google Sheets sebagai DB** — mudah dicek & diedit langsung oleh admin non-teknis ✅
 
 ---
@@ -92,15 +94,23 @@ kania-happy/
 │       │   │   ├── faq/             # FaqLookupService
 │       │   │   ├── schedule/        # GetAvailableScheduleService (generate occurrence mingguan)
 │       │   │   ├── booking/         # BookingService, BookingFlowHandler, InvoiceGenerator
-│       │   │   └── bot/             # MessageRouter (deteksi intent & routing)
+│       │   │   ├── bot/             # MessageRouter (deteksi intent & routing)
+│       │   │   ├── reminder/        # ReminderService, ReminderScheduler (cron H-1 & Hari H)
+│       │   │   ├── payment/         # PaymentVerificationService (approve/reject pembayaran)
+│       │   │   ├── takeover/        # TakeoverService, TakeoverCleanupScheduler (cron cleanup expired)
+│       │   │   └── ai/              # AiFallbackService (guardrail topik + konteks FAQ aktif)
 │       │   ├── infrastructure/
 │       │   │   ├── google-sheets/ # GoogleSheetsClient, SheetCache, BaseSheetRepository
 │       │   │   ├── logger/        # Winston logger
+│       │   │   ├── openai/        # OpenAiClient (wrapper tipis OpenAI SDK, fail-safe jika API key kosong)
 │       │   │   ├── repositories/  # Implementasi konkret GoogleSheetsXxxRepository (termasuk PaymentMethod)
 │       │   │   ├── state/         # ConversationStateStore (state booking per nomor WA, TTL 15 menit)
 │       │   │   └── whatsapp/      # BaileysClient (koneksi & kirim pesan WA)
 │       │   ├── presentation/
-│       │   │   ├── http/middlewares/ # errorHandler, requestLogger
+│       │   │   ├── http/
+│       │   │   │   ├── middlewares/  # errorHandler, requestLogger, authMiddleware (JWT)
+│       │   │   │   ├── controllers/  # AuthController, PaymentController, TakeoverController
+│       │   │   │   └── routes/       # apiRouter — daftar endpoint REST /api/*
 │       │   │   └── whatsapp/         # WhatsAppHandler (terima pesan masuk dari Baileys)
 │       │   └── shared/
 │       │       ├── config/env.ts    # Env validator (Zod) — fail-fast jika tidak lengkap
@@ -112,9 +122,13 @@ kania-happy/
 │       │   └── .env.example
 │       ├── tests/
 │       │   └── unit/
-│       │       ├── repositories.test.ts # Test M1: Service/Schedule/Faq repository
-│       │       ├── m2-services.test.ts  # Test M2: FaqLookup, GetAvailableSchedule, MessageRouter
-│       │       └── m3-booking.test.ts   # Test M3: InvoiceGenerator, ConversationStateStore, BookingService, BookingFlowHandler
+│       │       ├── repositories.test.ts          # Test M1: Service/Schedule/Faq repository
+│       │       ├── m2-services.test.ts           # Test M2: FaqLookup, GetAvailableSchedule, MessageRouter
+│       │       ├── m3-booking.test.ts            # Test M3: InvoiceGenerator, ConversationStateStore, BookingService, BookingFlowHandler
+│       │       ├── m4-reminder.test.ts           # Test M4: ReminderScheduler, ReminderService, format pesan
+│       │       ├── m5-payment-verification.test.ts # Test M5: PaymentVerificationService (approve/reject, audit log, notifikasi WA)
+│       │       ├── m6-takeover.test.ts           # Test M6: TakeoverService (start/release/cleanup), TakeoverCleanupScheduler
+│       │       └── m7-ai-fallback.test.ts        # Test M7: AiFallbackService (guardrail, prompt building), integrasi MessageRouter
 │       ├── .env.example
 │       ├── package.json
 │       ├── tsconfig.json
@@ -319,13 +333,17 @@ npm run test          # jalankan sekali
 npm run test:watch    # watch mode (re-run saat file berubah)
 ```
 
-Vitest akan menemukan test di `tests/**/*.test.ts`. Saat ini tersedia **54 unit test** tersebar di 3 file:
+Vitest akan menemukan test di `tests/**/*.test.ts`. Saat ini tersedia **115 unit test** tersebar di 7 file:
 
 | File | Cakupan |
 |------|---------|
 | `repositories.test.ts` | M1 — `ServiceRepository`, `ScheduleRepository`, `FaqRepository` (mock client & cache) |
 | `m2-services.test.ts` | M2 — `FaqLookupService`, `GetAvailableScheduleService`, `MessageRouter` (routing intent, fallback, menu) |
 | `m3-booking.test.ts` | M3 — `InvoiceGenerator`, `ConversationStateStore`, `BookingService`, `BookingFlowHandler` (happy path booking sampai konfirmasi) |
+| `m4-reminder.test.ts` | M4 — `ReminderScheduler.timeToCron`, `ReminderService.sendH1Reminders` & `sendHariHReminders` (filter tanggal, idempotency, format pesan) |
+| `m5-payment-verification.test.ts` | M5 — `PaymentVerificationService.approve` & `.reject` (happy path, guard idempotency `Paid`/`Rejected`, audit log, notifikasi WA non-fatal) |
+| `m6-takeover.test.ts` | M6 — `TakeoverService.startTakeover`/`.releaseTakeover`/`.cleanupExpired` (validasi, expiresAt, audit log, partial failure), `TakeoverCleanupScheduler` |
+| `m7-ai-fallback.test.ts` | M7 — `AiFallbackService.isEnabled`/`.answer` (kill-switch, guardrail `[DI_LUAR_TOPIK]`, error OpenAI → fallback statis, prompt building), integrasi `MessageRouter` |
 
 ---
 
@@ -354,12 +372,42 @@ Di folder `apps/server/`:
 | **M1** — Data Layer | ✅ Selesai | Domain entities, Repository interfaces, GoogleSheetsClient, SheetCache, 11 repository implementasi, unit test |
 | **M2** — Bot Read-only | ✅ Selesai | Webhook handler, MessageRouter, FAQ lookup, tampilkan layanan & jadwal |
 | **M3** — Booking Flow | ✅ Selesai | `ConversationStateStore`, `BookingService`, `BookingFlowHandler`, `InvoiceGenerator` — booking end-to-end sampai konfirmasi |
-| **M4** — Payment Flow | 🔜 Berikutnya | Verifikasi pembayaran oleh admin (Transfer/QRIS → Paid), endpoint REST untuk dashboard |
-| **M5** — Reminder | 📋 Planned | Cron H-1 & Hari H untuk semua booking aktif |
-| **M6** — Human Takeover | 📋 Planned | Admin override bot per nomor WA, auto-resume setelah timeout |
-| **M7** — AI Fallback | 📋 Planned | OpenAI untuk pertanyaan di luar FAQ, dengan guardrail topik |
-| **M8–M9** — Dashboard | 📋 Planned | Dashboard React + Vite untuk admin |
+| **M4** — Reminder | ✅ Selesai | `ReminderScheduler` (cron node-cron via Settings), `ReminderService` — reminder H-1 & Hari H untuk semua booking `Confirmed`, idempotent |
+| **M5** — Payment Flow | ✅ Selesai | `PaymentVerificationService` (approve/reject Transfer/QRIS → Paid/Rejected, auto-update Booking, audit log, notifikasi WA), Auth JWT, endpoint REST `/api/auth/*` & `/api/payments/*` |
+| **M6** — Human Takeover | ✅ Selesai | `TakeoverService` (start/release per nomor WA, auto-resume via expiresAt), `TakeoverCleanupScheduler` (cron 5 menit), endpoint REST `/api/takeover/*` |
+| **M7** — AI Fallback | ✅ Selesai | `OpenAiClient` (wrapper OpenAI SDK, fail-safe), `AiFallbackService` (guardrail topik 2-lapis, konteks FAQ aktif, kill-switch via Settings `ai_enabled`) |
+| **M8–M9** — Dashboard | 🔜 Berikutnya | Dashboard React + Vite untuk admin |
 | **M10** — Testing & Docs Final | 📋 Planned | Pemantapan test, dokumentasi API lengkap |
+
+---
+
+## REST API Admin (M5)
+
+Semua endpoint di-prefix `/api`. Endpoint selain `/api/auth/login` butuh header:
+
+```
+Authorization: Bearer <token>
+```
+
+Token didapat dari `POST /api/auth/login` dan berlaku selama `JWT_EXPIRES_IN` (default `1h`).
+
+| Method | Endpoint | Keterangan |
+|--------|----------|-----------|
+| `POST` | `/api/auth/login` | Login admin — body `{ username, password }` → `{ token, username }` |
+| `GET` | `/api/auth/me` | Info admin dari token aktif |
+| `GET` | `/api/payments` | Daftar semua pembayaran (semua status) |
+| `GET` | `/api/payments/pending` | Daftar pembayaran berstatus `Waiting Verification` |
+| `POST` | `/api/payments/:invoiceNumber/approve` | Setujui pembayaran → status `Paid`, Booking → `Confirmed`, kirim notifikasi WA |
+| `POST` | `/api/payments/:invoiceNumber/reject` | Tolak pembayaran — body opsional `{ reason }` → status `Rejected`, Booking → `Cancelled`, kirim notifikasi WA |
+| `GET` | `/api/takeover/:phone` | Cek status takeover satu nomor WA (`null` jika tidak ada takeover aktif) |
+| `POST` | `/api/takeover/:phone/start` | Mulai takeover — body opsional `{ timeoutMinutes }` (default dari Settings `takeover_timeout_minutes`) → bot diam untuk nomor tsb sampai expired atau dilepas manual |
+| `POST` | `/api/takeover/:phone/release` | Lepas takeover manual → bot langsung aktif lagi |
+
+Catatan:
+- Approve/reject bersifat **idempotent guard**: payment yang sudah `Paid` atau `Rejected` tidak bisa diproses ulang (response `409 CONFLICT`).
+- Setiap approve/reject otomatis tercatat di sheet `Admin Log` (action `VERIFY_PAYMENT` / `REJECT_PAYMENT`).
+- Jika pengiriman notifikasi WA gagal (mis. Baileys terputus), proses approve/reject **tetap berhasil** — error hanya dicatat ke log, tidak melempar exception ke client.
+- Takeover otomatis berakhir saat `expiresAt` terlewati — dicek dua cara: (1) lazy-check di `WhatsAppHandler` saat pesan baru masuk dari nomor tsb, (2) `TakeoverCleanupScheduler` yang berjalan tiap 5 menit untuk membersihkan baris yang sudah expired meski nomor tersebut tidak mengirim pesan lagi.
 
 ---
 
@@ -375,4 +423,4 @@ Di folder `apps/server/`:
 - Cache Google Sheets dikonfigurasi via `SHEET_CACHE_TTL_SECONDS` (default 60 detik). Set ke `0` untuk menonaktifkan cache saat development agar perubahan di spreadsheet langsung terlihat.
 - Kolom `keyword` di sheet FAQ dipisah koma, contoh: `harga,biaya,tarif,berapa` — matching dilakukan case-insensitive substring terhadap pesan customer.
 - Proyek ini dirancang sebagai **single-tenant** (1 sanggar = 1 instance server).
-- AI Fallback hanya dipanggil jika FAQ tidak menemukan jawaban, dan dibatasi guardrail topik Kania Happy saja untuk menghindari penggunaan token yang tidak perlu.
+- AI Fallback hanya dipanggil jika FAQ tidak menemukan jawaban, dan dibatasi guardrail topik Kania Happy saja untuk menghindari penggunaan token yang tidak perlu. Guardrail diterapkan 2 lapis: (1) system prompt eksplisit melarang topik di luar bisnis & meminta model membalas `[DI_LUAR_TOPIK]` jika tidak relevan, (2) `AiFallbackService` mendeteksi penanda tersebut dan menggantinya dengan pesan baku — sehingga format penolakan tetap konsisten meski model "lupa" instruksi. Fitur bisa dimatikan tanpa restart server lewat Settings `ai_enabled=false`, atau secara permanen lewat env `AI_ENABLED=false` / mengosongkan `OPENAI_API_KEY`.

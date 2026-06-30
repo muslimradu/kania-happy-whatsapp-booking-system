@@ -43,11 +43,27 @@ import { BookingFlowHandler } from '@application/booking/BookingFlowHandler';
 import { ReminderService } from '@application/reminder/ReminderService';
 import { ReminderScheduler } from '@application/reminder/ReminderScheduler';
 
+// ── Payment Verification (M5) ────────────────────────────────────────────────
+import { PaymentVerificationService } from '@application/payment/PaymentVerificationService';
+import { AuthController } from '@presentation/http/controllers/AuthController';
+import { PaymentController } from '@presentation/http/controllers/PaymentController';
+import { createApiRouter } from '@presentation/http/routes/apiRouter';
+
+// ── Human Takeover (M6) ──────────────────────────────────────────────────────
+import { TakeoverService } from '@application/takeover/TakeoverService';
+import { TakeoverCleanupScheduler } from '@application/takeover/TakeoverCleanupScheduler';
+import { TakeoverController } from '@presentation/http/controllers/TakeoverController';
+
+// ── AI Fallback (M7) ──────────────────────────────────────────────────────────
+import { OpenAiClient } from '@infrastructure/openai/OpenAiClient';
+import { AiFallbackService } from '@application/ai/AiFallbackService';
+
 function registerDependencies(): void {
   // ── Infrastructure ─────────────────────────────────────────────────────────
   container.register(DI_TOKENS.BaileysClient,      () => new BaileysClient());
   container.register(DI_TOKENS.GoogleSheetsClient,  () => new GoogleSheetsClient());
   container.register(DI_TOKENS.SheetCache,          () => new SheetCache());
+  container.register(DI_TOKENS.OpenAiClient,        () => new OpenAiClient());
 
   // ── Repositories (semua butuh GoogleSheetsClient + SheetCache) ────────────
   const getClient = () => container.resolve<GoogleSheetsClient>(DI_TOKENS.GoogleSheetsClient);
@@ -89,6 +105,14 @@ function registerDependencies(): void {
       container.resolve(DI_TOKENS.SettingsRepository),
     ));
 
+  // ── M7: AI Fallback ──────────────────────────────────────────────────────────
+  container.register(DI_TOKENS.AiFallbackService, () =>
+    new AiFallbackService(
+      container.resolve(DI_TOKENS.FaqRepository),
+      container.resolve(DI_TOKENS.SettingsRepository),
+      container.resolve(DI_TOKENS.OpenAiClient),
+    ));
+
   // ── M3: Booking Flow ──────────────────────────────────────────────────────
   container.register(DI_TOKENS.ConversationStateStore,
     () => new ConversationStateStore());
@@ -121,6 +145,7 @@ function registerDependencies(): void {
       container.resolve(DI_TOKENS.GetAvailableScheduleService),
       container.resolve(DI_TOKENS.BookingFlowHandler),
       container.resolve(DI_TOKENS.ConversationStateStore),
+      container.resolve(DI_TOKENS.AiFallbackService),
     ));
 
   // ── M4: Reminder ──────────────────────────────────────────────────────────
@@ -137,6 +162,28 @@ function registerDependencies(): void {
       container.resolve(DI_TOKENS.SettingsRepository),
     ));
 
+  // ── M5: Payment Verification ──────────────────────────────────────────────
+  container.register(DI_TOKENS.PaymentVerificationService, () =>
+    new PaymentVerificationService(
+      container.resolve(DI_TOKENS.PaymentRepository),
+      container.resolve(DI_TOKENS.BookingRepository),
+      container.resolve(DI_TOKENS.AdminLogRepository),
+      container.resolve(DI_TOKENS.BaileysClient),
+    ));
+
+  // ── M6: Human Takeover ───────────────────────────────────────────────────────
+  container.register(DI_TOKENS.TakeoverService, () =>
+    new TakeoverService(
+      container.resolve(DI_TOKENS.TakeoverRepository),
+      container.resolve(DI_TOKENS.SettingsRepository),
+      container.resolve(DI_TOKENS.AdminLogRepository),
+    ));
+
+  container.register(DI_TOKENS.TakeoverCleanupScheduler, () =>
+    new TakeoverCleanupScheduler(
+      container.resolve(DI_TOKENS.TakeoverService),
+    ));
+
   container.register(DI_TOKENS.WhatsAppHandler, () =>
     new WhatsAppHandler(
       container.resolve(DI_TOKENS.BaileysClient),
@@ -151,6 +198,16 @@ function createApp(): Express {
 
   app.use(express.json({ limit: '5mb' }));
   app.use(requestLogger);
+
+  // ── REST API (M5/M6) ──────────────────────────────────────────────────────────
+  const authController    = new AuthController();
+  const paymentController = new PaymentController(
+    container.resolve<PaymentVerificationService>(DI_TOKENS.PaymentVerificationService),
+  );
+  const takeoverController = new TakeoverController(
+    container.resolve<TakeoverService>(DI_TOKENS.TakeoverService),
+  );
+  app.use('/api', createApiRouter(authController, paymentController, takeoverController));
 
   app.get('/health', (_req, res) => {
     const baileysClient = container.resolve<BaileysClient>(DI_TOKENS.BaileysClient);
@@ -198,15 +255,23 @@ async function bootstrap(): Promise<void> {
   const reminderScheduler = container.resolve<ReminderScheduler>(DI_TOKENS.ReminderScheduler);
   await reminderScheduler.start();
 
+  // Mulai takeover cleanup scheduler (M6)
+  const takeoverCleanupScheduler = container.resolve<TakeoverCleanupScheduler>(
+    DI_TOKENS.TakeoverCleanupScheduler,
+  );
+  takeoverCleanupScheduler.start();
+
   // Graceful shutdown
   process.on('SIGTERM', () => {
     logger.info('SIGTERM diterima — menghentikan server...');
     reminderScheduler.stop();
+    takeoverCleanupScheduler.stop();
     process.exit(0);
   });
   process.on('SIGINT', () => {
     logger.info('SIGINT diterima — menghentikan server...');
     reminderScheduler.stop();
+    takeoverCleanupScheduler.stop();
     process.exit(0);
   });
 

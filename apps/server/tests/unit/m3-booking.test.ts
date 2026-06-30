@@ -177,7 +177,7 @@ describe('BookingService.confirmBooking', () => {
 
   it('transfer: booking status Pending, payment Waiting Verification', async () => {
     const result = await service.confirmBooking(
-      '628111', 'Budi', makeOccurrence(), makePaymentMethod('transfer'),
+      '628111', 'Budi', '628111222333', makeOccurrence(), makePaymentMethod('transfer'),
     );
     expect(result.success).toBe(true);
     expect(mockBookingRepo.create).toHaveBeenCalledWith(
@@ -190,7 +190,7 @@ describe('BookingService.confirmBooking', () => {
 
   it('transfer: pesan konfirmasi berisi nomor rekening', async () => {
     const result = await service.confirmBooking(
-      '628111', 'Budi', makeOccurrence(), makePaymentMethod('transfer'),
+      '628111', 'Budi', '628111222333', makeOccurrence(), makePaymentMethod('transfer'),
     );
     expect(result.message).toContain('1234567890');
     expect(result.message).toContain('Transfer');
@@ -198,7 +198,7 @@ describe('BookingService.confirmBooking', () => {
 
   it('qris: pesan konfirmasi berisi instruksi scan QRIS', async () => {
     const result = await service.confirmBooking(
-      '628111', 'Budi', makeOccurrence(), makePaymentMethod('qris'),
+      '628111', 'Budi', '628111222333', makeOccurrence(), makePaymentMethod('qris'),
     );
     expect(result.success).toBe(true);
     expect(result.message).toContain('QRIS');
@@ -207,7 +207,7 @@ describe('BookingService.confirmBooking', () => {
   it('jika repo gagal, kembalikan success: false', async () => {
     mockBookingRepo.create = vi.fn().mockRejectedValue(new Error('Sheet error'));
     const result = await service.confirmBooking(
-      '628111', 'Budi', makeOccurrence(), makePaymentMethod('transfer'),
+      '628111', 'Budi', '628111222333', makeOccurrence(), makePaymentMethod('transfer'),
     );
     expect(result.success).toBe(false);
   });
@@ -272,10 +272,19 @@ describe('BookingFlowHandler — happy path', () => {
     expect(stateStore.get(PHONE)?.step).toBe('CHOOSE_SCHEDULE');
   });
 
-  it('langkah 3: pilih jadwal (customer punya nama) → langsung ke payment', async () => {
+  it('langkah 3: pilih jadwal (customer baru, belum punya verifiedPhone) → minta nomor HP', async () => {
     await handler.handle(PHONE, 'booking');
     await handler.handle(PHONE, '1'); // pilih layanan
     const result = await handler.handle(PHONE, '1'); // pilih jadwal
+    expect(result.messages[0]).toContain('nomor HP');
+    expect(stateStore.get(PHONE)?.step).toBe('INPUT_PHONE');
+  });
+
+  it('langkah 3b: input nomor HP valid → lanjut ke pilih payment', async () => {
+    await handler.handle(PHONE, 'booking');
+    await handler.handle(PHONE, '1'); // pilih layanan
+    await handler.handle(PHONE, '1'); // pilih jadwal → masuk INPUT_PHONE
+    const result = await handler.handle(PHONE, '08111222333'); // input nomor HP
     expect(result.messages[0]).toContain('Pilih bayar');
     expect(stateStore.get(PHONE)?.step).toBe('CHOOSE_PAYMENT');
   });
@@ -284,6 +293,7 @@ describe('BookingFlowHandler — happy path', () => {
     await handler.handle(PHONE, 'booking');
     await handler.handle(PHONE, '1');
     await handler.handle(PHONE, '1');
+    await handler.handle(PHONE, '08111222333'); // input nomor HP
     const result = await handler.handle(PHONE, '1'); // pilih payment
     expect(result.messages[0]).toContain('Ringkasan');
     expect(stateStore.get(PHONE)?.step).toBe('CONFIRM');
@@ -293,6 +303,7 @@ describe('BookingFlowHandler — happy path', () => {
     await handler.handle(PHONE, 'booking');
     await handler.handle(PHONE, '1');
     await handler.handle(PHONE, '1');
+    await handler.handle(PHONE, '08111222333'); // input nomor HP
     await handler.handle(PHONE, '1');
     const result = await handler.handle(PHONE, 'ya');
     expect(result.messages[0]).toContain('Berhasil');

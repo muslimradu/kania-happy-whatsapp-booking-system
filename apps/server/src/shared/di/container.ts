@@ -72,4 +72,14 @@ export const DI_TOKENS = {
   // ── M4: Reminder ──────────────────────────────────────────────────────────
   ReminderService:   'ReminderService',
   ReminderScheduler: 'ReminderScheduler',
+
+  // ── M5: Payment Verification ──────────────────────────────────────────────
+  PaymentVerificationService: 'PaymentVerificationService',
+
+  // ── M6: Human Takeover ───────────────────────────────────────────────────────
+  TakeoverService:           'TakeoverService',
+  TakeoverCleanupScheduler:  'TakeoverCleanupScheduler',
+
+  // ── M7: AI Fallback ──────────────────────────────────────────────────────────
+  AiFallbackService: 'AiFallbackService',
 } as const;

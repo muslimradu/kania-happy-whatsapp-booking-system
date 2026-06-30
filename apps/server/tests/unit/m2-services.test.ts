@@ -192,6 +192,10 @@ describe('MessageRouter', () => {
       set: vi.fn(),
       clear: vi.fn(),
     };
+    const mockAiFallbackService = {
+      isEnabled: vi.fn().mockResolvedValue(false), // AI nonaktif → pakai fallback statis lama
+      answer:    vi.fn().mockResolvedValue('(AI fallback tidak terpakai di test ini)'),
+    };
     router = new MessageRouter(
       makeServiceRepo(SAMPLE_SERVICES),
       makeSettingsRepo(),
@@ -199,6 +203,7 @@ describe('MessageRouter', () => {
       scheduleService,
       mockBookingFlowHandler as any,
       mockStateStore as any,
+      mockAiFallbackService as any,
     );
   });
 
