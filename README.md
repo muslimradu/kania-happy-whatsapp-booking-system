@@ -39,7 +39,7 @@ Sistem booking berbasis WhatsApp untuk **Sanggar Senam Kania Happy**. Bot WhatsA
 - 💰 **Verifikasi Pembayaran** — Admin approve/reject Transfer & QRIS via REST API, auto-update status booking & notifikasi WA ✅
 - 👤 **Human Takeover** — admin override bot per nomor WA (auto-resume timeout, cleanup terjadwal) ✅
 - 🧠 **AI Fallback** — OpenAI menjawab pertanyaan di luar FAQ (dengan guardrail topik & FAQ sebagai konteks) ✅
-- 📊 **Dashboard Admin** — CRUD semua entitas, broadcast, settings, audit log (🔜 M8-M9)
+- 📊 **Dashboard Admin** — Login JWT, verifikasi pembayaran, human takeover — via web UI (React + Vite) ✅
 - 🔐 **Auth Admin** — Login JWT untuk seluruh endpoint REST admin ✅
 - 📋 **Google Sheets sebagai DB** — mudah dicek & diedit langsung oleh admin non-teknis ✅
 
@@ -85,6 +85,18 @@ Admin (Browser) ─────────────────────�
 ```
 kania-happy/
 ├── apps/
+│   ├── client/                  # Dashboard Admin (React 18 + Vite 5 + Tailwind)
+│   │   ├── src/
+│   │   │   ├── components/
+│   │   │   │   ├── layout/      # AdminLayout (outlet + auth guard), Sidebar (nav + logout)
+│   │   │   │   └── ui/          # Badge, Spinner, EmptyState, ConfirmModal, PageHeader
+│   │   │   ├── hooks/           # useAuth (login/logout + JWT state)
+│   │   │   ├── lib/             # api.ts (fetch wrapper + token inject), AuthContext, format.ts
+│   │   │   ├── pages/           # LoginPage, PaymentsPage, TakeoverPage
+│   │   │   └── types/           # api.ts (type mirror dari server entities)
+│   │   ├── index.html
+│   │   ├── tailwind.config.js
+│   │   └── vite.config.ts       # proxy /api → localhost:3000, alias @/
 │   └── server/                  # Backend utama (Bot + REST API)
 │       ├── src/
 │       │   ├── domain/
@@ -146,7 +158,9 @@ kania-happy/
 |----------|-----------|
 | Runtime | Node.js 20+ |
 | Language | TypeScript 5 (strict mode) |
-| Framework | Express 4 |
+| Framework (server) | Express 4 |
+| Framework (client) | React 18 + Vite 5 |
+| Styling | Tailwind CSS 3 |
 | WhatsApp | [@whiskeysockets/baileys](https://github.com/WhiskeySockets/Baileys) |
 | Database | Google Sheets (via googleapis v4) |
 | AI | OpenAI API (gpt-4o-mini, opsional) |
@@ -362,6 +376,20 @@ Di folder `apps/server/`:
 | `npm run test` | Jalankan semua unit test |
 | `npm run test:watch` | Jalankan test dalam watch mode |
 
+### Dashboard Admin (`apps/client`)
+
+```bash
+cd apps/client
+npm install
+npm run dev    # http://localhost:5173
+```
+
+| Script | Keterangan |
+|--------|-----------|
+| `npm run dev` | Jalankan Vite dev server dengan HMR (port 5173) |
+| `npm run build` | Build produksi ke `dist/` |
+| `npm run preview` | Preview hasil build produksi |
+
 ---
 
 ## Roadmap Milestone
@@ -376,7 +404,8 @@ Di folder `apps/server/`:
 | **M5** — Payment Flow | ✅ Selesai | `PaymentVerificationService` (approve/reject Transfer/QRIS → Paid/Rejected, auto-update Booking, audit log, notifikasi WA), Auth JWT, endpoint REST `/api/auth/*` & `/api/payments/*` |
 | **M6** — Human Takeover | ✅ Selesai | `TakeoverService` (start/release per nomor WA, auto-resume via expiresAt), `TakeoverCleanupScheduler` (cron 5 menit), endpoint REST `/api/takeover/*` |
 | **M7** — AI Fallback | ✅ Selesai | `OpenAiClient` (wrapper OpenAI SDK, fail-safe), `AiFallbackService` (guardrail topik 2-lapis, konteks FAQ aktif, kill-switch via Settings `ai_enabled`) |
-| **M8–M9** — Dashboard | 🔜 Berikutnya | Dashboard React + Vite untuk admin |
+| **M8** — Dashboard Auth + Payment/Takeover | ✅ Selesai | `apps/client` (React 18 + Vite 5 + Tailwind), halaman Login JWT, layout sidebar admin, halaman Pembayaran (approve/reject), halaman Takeover (start/release/cek status) |
+| **M9** — Dashboard CRUD Master Data | 🔜 Berikutnya | Halaman Layanan, Jadwal, FAQ, Metode Bayar, Settings, Broadcast |
 | **M10** — Testing & Docs Final | 📋 Planned | Pemantapan test, dokumentasi API lengkap |
 
 ---

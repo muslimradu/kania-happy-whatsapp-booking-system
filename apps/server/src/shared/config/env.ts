@@ -15,6 +15,7 @@ const envSchema = z.object({
   ADMIN_PASSWORD: z.string().min(6, 'ADMIN_PASSWORD minimal 6 karakter'),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET wajib diisi, minimal 16 karakter'),
   JWT_EXPIRES_IN: z.string().default('1h'),
+  CLIENT_ORIGIN: z.string().default('http://localhost:5173'),
 
   GOOGLE_SPREADSHEET_ID: z.string().min(1, 'GOOGLE_SPREADSHEET_ID wajib diisi'),
   GOOGLE_SERVICE_ACCOUNT_EMAIL: z.string().email(),

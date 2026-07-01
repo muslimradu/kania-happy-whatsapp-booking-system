@@ -1,4 +1,5 @@
 import express, { type Express } from 'express';
+import cors from 'cors';
 import { env } from '@shared/config/env';
 import { logger } from '@infrastructure/logger/Logger';
 import { requestLogger } from '@presentation/http/middlewares/requestLogger';
@@ -196,6 +197,10 @@ function registerDependencies(): void {
 function createApp(): Express {
   const app = express();
 
+  app.use(cors({
+    origin: env.CLIENT_ORIGIN,
+    credentials: true,
+  }));
   app.use(express.json({ limit: '5mb' }));
   app.use(requestLogger);
 

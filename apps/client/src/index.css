@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface text-gray-800 antialiased;
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* Scrollbar tipis sesuai tema */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-primary-200 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-primary-300; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600
+           text-white text-sm font-semibold rounded-lg transition-colors
+           focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-1
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-primary-50
+           text-gray-700 hover:text-primary-700 text-sm font-semibold rounded-lg
+           border border-surface-border transition-colors
+           focus:outline-none focus:ring-2 focus:ring-primary-300 focus:ring-offset-1
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-danger {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600
+           text-white text-sm font-semibold rounded-lg transition-colors
+           focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .card {
+    @apply bg-surface-card rounded-xl shadow-card border border-surface-border;
+  }
+  .input {
+    @apply w-full px-3 py-2 rounded-lg border border-surface-border bg-white text-sm
+           text-gray-800 placeholder:text-gray-400
+           focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400
+           transition-shadow;
+  }
+  .badge-pending  { @apply inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700; }
+  .badge-paid     { @apply inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700; }
+  .badge-rejected { @apply inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600; }
+  .badge-cash     { @apply inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700; }
+  .badge-active   { @apply inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700; }
+}
